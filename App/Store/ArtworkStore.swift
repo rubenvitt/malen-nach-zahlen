@@ -56,18 +56,18 @@ struct ArtworkMeta: Codable, Identifiable, Hashable, Sendable {
         let meta = ArtworkMeta(id: UUID(), title: title, created: now, modified: now, progress: 0, options: options)
         let folder = folder(meta.id)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        try Self.encodeTemplate(template).write(to: folder.appending(path: "template.bin"), options: .atomic)
+        try template.encoded().write(to: folder.appending(path: "template.bin"), options: .atomic)
         if let thumbnail { try thumbnail.write(to: folder.appending(path: "thumb.jpg"), options: .atomic) }
         try writeMeta(meta)
         artworks.insert(meta, at: 0)
         return meta
     }
 
-    /// Decodes off the main actor; a 1000 px template is a few MB.
+    /// Decodes off the main actor: the engine recomputes fields and spots while loading.
     func loadTemplate(_ id: UUID) async throws -> Template {
         let url = folder(id).appending(path: "template.bin")
         return try await Task.detached(priority: .userInitiated) {
-            try Self.decodeTemplate(Data(contentsOf: url))
+            try Template(decoding: Data(contentsOf: url))
         }.value
     }
 
@@ -136,16 +136,6 @@ struct ArtworkMeta: Codable, Identifiable, Hashable, Sendable {
         artworks.removeAll { $0.id == meta.id }
         artworks.append(meta)
         artworks.sort { $0.modified > $1.modified }
-    }
-
-    nonisolated static func encodeTemplate(_ template: Template) throws -> Data {
-        let encoder = PropertyListEncoder()
-        encoder.outputFormat = .binary
-        return try encoder.encode(template)
-    }
-
-    nonisolated static func decodeTemplate(_ data: Data) throws -> Template {
-        try PropertyListDecoder().decode(Template.self, from: data)
     }
 
     private static let encoder: JSONEncoder = {

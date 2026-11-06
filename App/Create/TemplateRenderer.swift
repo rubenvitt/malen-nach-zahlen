@@ -16,7 +16,7 @@ enum TemplateRenderer {
         let line: UInt32 = pack(52, 46, 42)
         let colors = t.palette.map { pack($0.r, $0.g, $0.b) }
         var buf = [UInt32](repeating: white, count: W * H)
-        let lw = max(1, min(3, s / 2))   // line width in output pixels, grows a little with the scale
+        let lw = s >= 2 ? min(3, max(2, s / 2)) : 1   // output pixels; stays visible when the preview is scaled down
 
         buf.withUnsafeMutableBufferPointer { out in
             t.colorOfPixel.withUnsafeBufferPointer { col in

@@ -22,7 +22,7 @@ struct PaintView: View {
             if let session {
                 PaintCanvas(session: session).ignoresSafeArea()
                 PaintChrome(session: session, palette: palette, title: title, onBack: close,
-                            onUndo: { session.undo(); autosaver?.changed() },
+                            onUndo: { session.undo() },   // undo fires onStrokeEnded → autosave
                             onShowFinished: { completion = .look })
                 if let completion {
                     CompletionView(session: session, title: title, palette: palette,
