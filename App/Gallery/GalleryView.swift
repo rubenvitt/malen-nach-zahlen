@@ -143,6 +143,7 @@ private struct NewPictureCard: View {
                             .frame(width: 76, height: 76)
                             .background(.white.opacity(0.22), in: Circle())
                         Text("Aus deinen Fotos").font(.rounded(.headline))
+                            .multilineTextAlignment(.center).minimumScaleFactor(0.6).padding(.horizontal, 8)
                     }
                     .foregroundStyle(.white)
                 }
@@ -188,7 +189,7 @@ private struct ArtworkCard: View {
             .accessibilityLabel("\(meta.title), \(progressText)")
             .accessibilityIdentifier("artworkCard")
 
-            HStack(spacing: 10) {
+            Group {
                 if isRenaming {
                     TextField("Titel", text: $draft)
                         .font(.rounded(.headline))
@@ -199,16 +200,28 @@ private struct ArtworkCard: View {
                         .onAppear { draft = meta.title; focused = true }
                         .onChange(of: focused) { if !focused { onRename(draft) } }
                 } else {
-                    Text(meta.title).font(.rounded(.headline)).foregroundStyle(Theme.ink).lineLimit(1)
+                    // Large Dynamic Type: progress moves below the title instead of truncating it.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 10) { title; Spacer(minLength: 4); progress }
+                        VStack(alignment: .leading, spacing: 4) { title; progress }
+                    }
                 }
-                Spacer(minLength: 4)
-                ProgressRing(progress: meta.progress)
-                Text(progressText)
-                    .font(.rounded(.subheadline, weight: .medium))
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.softInk)
             }
             .accessibilityHidden(!isRenaming)
+        }
+    }
+
+    private var title: some View {
+        Text(meta.title).font(.rounded(.headline)).foregroundStyle(Theme.ink)
+    }
+
+    private var progress: some View {
+        HStack(spacing: 8) {
+            ProgressRing(progress: meta.progress)
+            Text(progressText)
+                .font(.rounded(.subheadline, weight: .medium))
+                .monospacedDigit()
+                .foregroundStyle(Theme.softInk)
         }
     }
 

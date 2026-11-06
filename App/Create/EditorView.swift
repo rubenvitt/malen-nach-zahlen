@@ -86,7 +86,7 @@ struct EditorView: View {
             sliderRow(title: "Details", value: detailLabel) {
                 HStack(spacing: 10) {
                     Text("grob").font(.rounded(.footnote, weight: .medium)).foregroundStyle(Theme.softInk)
-                    Slider(value: $model.detail, in: 0...1, onEditingChanged: editingChanged)
+                    Slider(value: $model.detail, in: 0...1, step: 0.05, onEditingChanged: editingChanged)
                         .accessibilityValue(detailLabel)
                     Text("fein").font(.rounded(.footnote, weight: .medium)).foregroundStyle(Theme.softInk)
                 }

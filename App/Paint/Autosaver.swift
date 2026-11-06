@@ -9,6 +9,7 @@ import UIKit
     private let interval: Duration
     private var pending: Task<Void, Never>?
     private var dirty = false
+    private var thumbStale = false
 
     init(id: UUID, store: ArtworkStore, session: PaintingSession, interval: Duration = .seconds(2)) {
         self.id = id; self.store = store; self.session = session; self.interval = interval
@@ -16,6 +17,7 @@ import UIKit
 
     func changed() {
         dirty = true
+        thumbStale = true
         guard pending == nil else { return }
         pending = Task { [weak self, interval] in
             try? await Task.sleep(for: interval)
@@ -33,9 +35,12 @@ import UIKit
     }
 
     private func save(withThumbnail: Bool) {
-        guard dirty else { return }
-        dirty = false
-        let thumb = withThumbnail ? session.renderFinished(showLines: true, maxSide: 900).jpegData(compressionQuality: 0.85) : nil
+        let renderThumb = withThumbnail && thumbStale
+        guard dirty || renderThumb else { return }
+        let thumb = renderThumb ? session.renderFinished(showLines: true, maxSide: 900).jpegData(compressionQuality: 0.85) : nil
         store.save(id, paint: session.paintLayerPNG(), thumbnail: thumb, progress: session.progress)
+        dirty = false
+        // The stub canvas renders an empty image; keep trying until a real thumbnail was written.
+        if thumb != nil { thumbStale = false }
     }
 }

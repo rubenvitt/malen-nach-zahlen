@@ -134,7 +134,7 @@ private struct PaintChrome: View {
                 RoundButton(systemImage: "arrow.uturn.backward", label: "Rückgängig", action: onUndo)
                     .disabled(!session.canUndo)
                 RoundButton(systemImage: "arrow.up.left.and.arrow.down.right", label: "Ganzes Bild") {
-                    session.showWholePicture()
+                    session.fitWholePicture()
                 }
             }
             .foregroundStyle(Theme.ink)

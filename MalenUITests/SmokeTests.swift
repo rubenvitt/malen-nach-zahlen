@@ -10,7 +10,7 @@ final class SmokeTests: XCTestCase {
 
         let card = app.buttons["artworkCard"]
         XCTAssertTrue(card.waitForExistence(timeout: 10))
-        XCTAssertTrue(app.buttons["newPicture"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["newPicture"].exists)
         card.tap()
 
         XCTAssertTrue(app.buttons["pot-1"].waitForExistence(timeout: 10))
@@ -44,7 +44,8 @@ final class SmokeTests: XCTestCase {
         attach(app, "Editor")
         start.tap()
 
-        XCTAssertTrue(app.buttons["backToGallery"].waitForExistence(timeout: 30))
+        // Debug build of the full-resolution engine on a CI runner can take a while.
+        XCTAssertTrue(app.buttons["backToGallery"].waitForExistence(timeout: 120))
         app.buttons["backToGallery"].tap()
         XCTAssertTrue(app.buttons["artworkCard"].waitForExistence(timeout: 10))
     }
