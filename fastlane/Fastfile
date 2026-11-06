@@ -1,0 +1,24 @@
+default_platform(:ios)
+
+platform :ios do
+  desc "Upload the exported IPA to TestFlight and hand it to the external group"
+  lane :beta do
+    api_key = app_store_connect_api_key(
+      key_id: ENV.fetch("ASC_KEY_ID"),
+      issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+      key_filepath: ENV.fetch("ASC_KEY_PATH")
+    )
+    # The external group only exists after a first upload; until TESTFLIGHT_GROUP is set, just upload.
+    group = ENV.fetch("TESTFLIGHT_GROUP", "")
+    distribute = !group.empty?
+    options = {
+      api_key: api_key,
+      ipa: ENV.fetch("IPA_PATH"),
+      changelog: ENV.fetch("CHANGELOG"),
+      distribute_external: distribute,
+      groups: (distribute ? [group] : nil),
+      skip_waiting_for_build_processing: !distribute
+    }.compact
+    pilot(options)
+  end
+end

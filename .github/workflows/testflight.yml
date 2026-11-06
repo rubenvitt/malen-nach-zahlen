@@ -1,0 +1,86 @@
+name: TestFlight
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Never cancel an upload midway; queue instead.
+concurrency:
+  group: testflight
+  cancel-in-progress: false
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+
+jobs:
+  ci:
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: ci
+    # workflow_dispatch can start from any branch; secrets must only reach main
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: brew install xcodegen
+      - run: xcodegen generate
+      - name: Write App Store Connect key
+        env:
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+        run: |
+          printf '%s' "$ASC_KEY_P8_BASE64" | base64 --decode > "$RUNNER_TEMP/asc_key.p8"
+          chmod 600 "$RUNNER_TEMP/asc_key.p8"
+      - name: Archive
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          xcodebuild archive -scheme Malen -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/Malen.xcarchive" \
+            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER.$GITHUB_RUN_ATTEMPT" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/asc_key.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+      - name: Export IPA
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/Malen.xcarchive" \
+            -exportPath "$RUNNER_TEMP/export" -exportOptionsPlist ExportOptions.plist \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/asc_key.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+      - name: Upload to TestFlight
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          TESTFLIGHT_GROUP: ${{ vars.TESTFLIGHT_GROUP }}
+          FASTLANE_SKIP_UPDATE_CHECK: "1"
+          LC_ALL: en_US.UTF-8
+          LANG: en_US.UTF-8
+        run: |
+          export ASC_KEY_PATH="$RUNNER_TEMP/asc_key.p8"
+          set -- "$RUNNER_TEMP"/export/*.ipa
+          if [ "$#" -ne 1 ] || [ ! -f "$1" ]; then
+            echo "Expected exactly one .ipa in export dir, found: $*" >&2
+            exit 1
+          fi
+          export IPA_PATH="$1"
+          CHANGELOG="$(git log -1 --pretty=%s)"
+          export CHANGELOG
+          fastlane beta
+      - name: Remove App Store Connect key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/asc_key.p8"

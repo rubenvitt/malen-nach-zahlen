@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  # main is tested inside the TestFlight run, which calls this workflow
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+
+jobs:
+  engine:
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: swift test
+        working-directory: Packages/PaintEngine
+
+  app-device:
+    runs-on: macos-26
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        device: [iPad]
+    name: app (${{ matrix.device }})
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: brew install xcodegen
+      - run: xcodegen generate
+      - name: Test on an ${{ matrix.device }} simulator
+        env:
+          DEVICE: ${{ matrix.device }}
+        run: |
+          UDID=$(xcrun simctl list devices available -j | jq -r --arg device "$DEVICE" '[.devices[][] | select(.name | startswith($device))][0].udid')
+          if [ -z "$UDID" ] || [ "$UDID" = null ]; then
+            echo "No $DEVICE simulator available" >&2
+            exit 1
+          fi
+          xcodebuild test -scheme Malen -destination "id=$UDID" -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO
+
+  # The main ruleset requires a check named "app"; it passes only when every device passed.
+  app:
+    needs: app-device
+    if: always() # a skipped required check would count as passed
+    runs-on: ubuntu-latest
+    steps:
+      - run: test "$RESULT" = success
+        env:
+          RESULT: ${{ needs.app-device.result }}

@@ -1,2 +1,22 @@
+# Von xcodegen generiert — project.yml ist die Quelle der Wahrheit.
+Malen.xcodeproj/
+DerivedInfo/
+
+# Build-Artefakte
+.build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.swiftpm/
+
+# macOS
 .DS_Store
-node_modules/
+
+# Signierung / Upload — nie einchecken (Repo ist öffentlich)
+*.p8
+*.ipa
+*.xcarchive
+fastlane/report.xml
+
+# Agent-Arbeitsverzeichnis
+.superpowers/
