@@ -1,9 +1,58 @@
 import XCTest
 
 final class SmokeTests: XCTestCase {
-    func testAppLaunches() {
+    override func setUp() { continueAfterFailure = false }
+
+    /// Fixture template in a temp store → open it → paint screen → back → still in the gallery.
+    func testOpenArtworkPaintAndReturn() {
         let app = XCUIApplication()
+        app.launchArguments = ["-uiTestStore", "-uiTestFixedTemplate"]
         app.launch()
-        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
+
+        let card = app.buttons["artworkCard"]
+        XCTAssertTrue(card.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["newPicture"].exists)
+        card.tap()
+
+        XCTAssertTrue(app.buttons["pot-1"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["pot-3"].exists)
+        app.buttons["pot-2"].tap()
+        XCTAssertTrue(app.buttons["pot-2"].isSelected)
+        attach(app, "Malen")
+
+        app.buttons["backToGallery"].tap()
+        XCTAssertTrue(app.buttons["artworkCard"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.buttons.matching(identifier: "artworkCard").count, 1)
+        attach(app, "Galerie")
+    }
+
+    /// Bundled motif → editor → „Los geht's“ → paint → back → the new picture is in the gallery.
+    func testCreateFromMotif() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uiTestStore"]
+        app.launch()
+
+        let motif = app.buttons["motif-fox"]
+        XCTAssertTrue(motif.waitForExistence(timeout: 10))
+        try XCTSkipUnless(motif.isEnabled, "Motiv-Bilder fehlen noch im Asset-Katalog")
+        motif.tap()
+
+        let start = app.buttons["startPainting"]
+        XCTAssertTrue(start.waitForExistence(timeout: 10))
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == true"), object: start)
+        XCTAssertEqual(XCTWaiter().wait(for: [enabled], timeout: 20), .completed)
+        attach(app, "Editor")
+        start.tap()
+
+        XCTAssertTrue(app.buttons["backToGallery"].waitForExistence(timeout: 30))
+        app.buttons["backToGallery"].tap()
+        XCTAssertTrue(app.buttons["artworkCard"].waitForExistence(timeout: 10))
+    }
+
+    private func attach(_ app: XCUIApplication, _ name: String) {
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = name
+        shot.lifetime = .keepAlways
+        add(shot)
     }
 }
