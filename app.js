@@ -168,7 +168,7 @@ function gesture() {
 
 view.addEventListener('pointerdown', (e) => {
   if (!tpl) return;
-  view.setPointerCapture(e.pointerId);
+  try { view.setPointerCapture(e.pointerId); } catch {} // throws for pointers already gone; capture is optional
   pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (pts.size === 2) {
     last = null;
@@ -269,4 +269,5 @@ $('colors').addEventListener('change', () => {
 
 $('fit').addEventListener('click', fit);
 addEventListener('resize', fit);
+navigator.storage?.persist?.(); // otherwise Safari may evict saved progress after 7 days without a visit
 restore();
