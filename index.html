@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Malen nach Zahlen</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <label class="btn">Bild wählen<input type="file" id="file" accept="image/*" hidden></label>
+    <label>Farben
+      <select id="colors"><option>8</option><option selected>12</option><option>16</option><option>24</option></select>
+    </label>
+    <label>Pinsel <input type="range" id="size" min="2" max="40" value="10"></label>
+    <button id="fit" class="btn">Ganzes Bild</button>
+  </header>
+  <main id="view">
+    <div id="stage"><canvas id="base"></canvas><canvas id="paint"></canvas><canvas id="lines"></canvas></div>
+    <p id="hint">Wähle ein Foto – daraus wird eine Malvorlage.<br>Malen mit einem Finger, zoomen mit zwei.</p>
+  </main>
+  <nav id="palette" aria-label="Farben"></nav>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
