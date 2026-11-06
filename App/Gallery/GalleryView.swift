@@ -119,9 +119,10 @@ struct GalleryView: View {
 private struct CardFrame<Content: View>: View {
     @ViewBuilder let content: Content
     var body: some View {
-        content
+        Color.clear
             .aspectRatio(4 / 3, contentMode: .fit)
             .frame(maxWidth: .infinity)
+            .overlay { content }
             .background(Theme.card)
             .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(.black.opacity(0.05)))

@@ -22,24 +22,26 @@ struct RGBAImageTests {
         return data as Data
     }
 
-    private func pixel(_ img: RGBAImage, _ x: Int, _ y: Int) -> [UInt8] {
+    /// Colour management may shift channels slightly (TIFF without profile), so classify instead of comparing exactly.
+    private func pixel(_ img: RGBAImage, _ x: Int, _ y: Int) -> String {
         let i = (y * img.width + x) * 4
-        return Array(img.pixels[i..<i + 3])
+        let (r, b) = (img.pixels[i], img.pixels[i + 2])
+        return r > 200 && b < 80 ? "red" : b > 200 && r < 80 ? "blue" : "other"
     }
 
     @Test func upright() throws {
         let img = try RGBAImage(data: tiff(orientation: 1))
         #expect(img.width == 40 && img.height == 20)
-        #expect(pixel(img, 2, 10) == [255, 0, 0])
-        #expect(pixel(img, 37, 10) == [0, 0, 255])
+        #expect(pixel(img, 2, 10) == "red")
+        #expect(pixel(img, 37, 10) == "blue")
     }
 
     @Test func exifRotationIsApplied() throws {
         // Orientation 6: rotate 90° clockwise for display → portrait, the red left half ends up on top.
         let img = try RGBAImage(data: tiff(orientation: 6))
         #expect(img.width == 20 && img.height == 40)
-        #expect(pixel(img, 10, 2) == [255, 0, 0])
-        #expect(pixel(img, 10, 37) == [0, 0, 255])
+        #expect(pixel(img, 10, 2) == "red")
+        #expect(pixel(img, 10, 37) == "blue")
     }
 
     @Test func downsamplesToMaxSide() throws {

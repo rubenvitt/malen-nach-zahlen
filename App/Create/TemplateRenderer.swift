@@ -49,7 +49,7 @@ enum TemplateRenderer {
         }
 
         let space = CGColorSpace(name: CGColorSpace.sRGB)!
-        let info = CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+        let info = CGImageAlphaInfo.premultipliedLast.rawValue   // bytes R, G, B, A in memory
         return buf.withUnsafeMutableBytes { raw -> CGImage? in
             guard let ctx = CGContext(data: raw.baseAddress, width: W, height: H, bitsPerComponent: 8,
                                       bytesPerRow: W * 4, space: space, bitmapInfo: info) else { return nil }
@@ -64,7 +64,7 @@ enum TemplateRenderer {
         return UIImage(cgImage: image).jpegData(compressionQuality: 0.85)
     }
 
-    // ABGR in memory order for byteOrder32Little + premultipliedLast → RGBA bytes.
+    // Little-endian UInt32 → memory bytes R, G, B, A.
     private static func pack(_ r: UInt8, _ g: UInt8, _ b: UInt8) -> UInt32 {
         0xFF00_0000 | UInt32(b) << 16 | UInt32(g) << 8 | UInt32(r)
     }
@@ -75,7 +75,7 @@ enum TemplateRenderer {
         let gray = CGColor(red: 0.42, green: 0.40, blue: 0.38, alpha: 1)
         var fonts: [Int: CTFont] = [:]
         for spot in t.spots {
-            let size = min(CGFloat(spot.radius) * CGFloat(s) * 1.15, CGFloat(s) * 11)
+            let size = min(CGFloat(spot.radius) * CGFloat(s) * 1.15, CGFloat(s) * 14)
             guard size >= 7, Int(spot.field) < t.colorOfField.count else { continue }
             let key = Int(size.rounded())
             let font = fonts[key] ?? CTFontCreateWithFontDescriptor(descriptor as CTFontDescriptor, CGFloat(key), nil)

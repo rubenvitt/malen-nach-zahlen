@@ -1,10 +1,9 @@
 import XCTest
 
 final class SmokeTests: XCTestCase {
-    override func setUp() { continueAfterFailure = false }
-
     /// Fixture template in a temp store → open it → paint screen → back → still in the gallery.
-    func testOpenArtworkPaintAndReturn() {
+    @MainActor func testOpenArtworkPaintAndReturn() {
+        continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-uiTestStore", "-uiTestFixedTemplate"]
         app.launch()
@@ -27,7 +26,8 @@ final class SmokeTests: XCTestCase {
     }
 
     /// Bundled motif → editor → „Los geht's“ → paint → back → the new picture is in the gallery.
-    func testCreateFromMotif() throws {
+    @MainActor func testCreateFromMotif() throws {
+        continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-uiTestStore"]
         app.launch()
@@ -49,7 +49,7 @@ final class SmokeTests: XCTestCase {
         XCTAssertTrue(app.buttons["artworkCard"].waitForExistence(timeout: 10))
     }
 
-    private func attach(_ app: XCUIApplication, _ name: String) {
+    @MainActor private func attach(_ app: XCUIApplication, _ name: String) {
         let shot = XCTAttachment(screenshot: app.screenshot())
         shot.name = name
         shot.lifetime = .keepAlways

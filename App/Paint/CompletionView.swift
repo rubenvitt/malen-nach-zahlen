@@ -49,13 +49,17 @@ struct CompletionView: View {
                         .accessibilityLabel("Fertiges Bild")
                 }
 
-                Toggle(isOn: $showLines.animation(.easeInOut(duration: 0.25))) {
-                    Label("Ränder zeigen", systemImage: "square.grid.3x3")
-                        .font(.rounded(.headline, weight: .medium))
+                Button {
+                    withAnimation(.easeInOut(duration: 0.25)) { showLines.toggle() }
+                } label: {
+                    Label(showLines ? "Ränder ausblenden" : "Ränder zeigen",
+                          systemImage: showLines ? "square.grid.3x3.fill" : "square.grid.3x3")
+                        .font(.rounded(.headline, weight: .semibold))
+                        .foregroundStyle(Theme.ink)
+                        .padding(.horizontal, 18).frame(minHeight: 44)
+                        .background(.ultraThinMaterial, in: Capsule())
                 }
-                .toggleStyle(.button)
-                .buttonBorderShape(.capsule)
-                .tint(Theme.ink)
+                .buttonStyle(PressableStyle())
 
                 HStack(spacing: 14) {
                     if let image {
