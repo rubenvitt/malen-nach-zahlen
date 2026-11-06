@@ -261,7 +261,14 @@ private final class StrokeRecognizer: UIGestureRecognizer {
             }
             return
         }
-        guard touches.count == 1, let touch = touches.first, (event.allTouches?.count ?? 1) == 1 else {
+        guard touches.count == 1, let touch = touches.first else {
+            state = .failed
+            return
+        }
+        // Fallback finger painting needs exactly one finger; allTouches also holds touches this
+        // recognizer never gets (a resting palm), so the pencil ignores them.
+        let fingers = event.allTouches?.filter { $0.type == .direct && $0.phase != .ended && $0.phase != .cancelled }.count ?? 0
+        if touch.type != .pencil && fingers > 1 {
             state = .failed
             return
         }

@@ -213,7 +213,7 @@ final class PaintLayer {
     private func rasterize(from a: CGPoint, to b: CGPoint, commit: Bool, touched: inout Set<Int32>) -> PixelRect? {
         let box = boundsOfSegment(a, b)
         guard !box.isEmpty, strokeColor < template.palette.count else { return nil }
-        if commit { saveTiles(box) }
+        let saved = commit ? saveTiles(box) : []
         let r = strokeRadius, ax = Double(a.x), ay = Double(a.y)
         let dx = Double(b.x) - ax, dy = Double(b.y) - ay
         let len2 = dx * dx + dy * dy
@@ -252,6 +252,8 @@ final class PaintLayer {
                 }
             }
         }}}
+        // Drop snapshots nobody needed, so strokes that change nothing leave no undo step.
+        if !changed { saved.forEach { stroke?.tiles[$0] = nil } }
         return changed ? box : nil
     }
 
@@ -292,15 +294,18 @@ final class PaintLayer {
         return PixelRect(x0: tx * t, y0: ty * t, x1: min(width, tx * t + t), y1: min(height, ty * t + t))
     }
 
-    private func saveTiles(_ r: PixelRect) {
-        guard stroke != nil, !r.isEmpty else { return }
+    /// Snapshots tiles not yet saved in this stroke; returns the newly saved ones.
+    @discardableResult private func saveTiles(_ r: PixelRect) -> [Int] {
+        guard stroke != nil, !r.isEmpty else { return [] }
         let t = Self.tileSize
+        var added: [Int] = []
         for ty in (r.y0 / t)...((r.y1 - 1) / t) {
             for tx in (r.x0 / t)...((r.x1 - 1) / t) {
                 let index = ty * tilesPerRow + tx
-                if stroke!.tiles[index] == nil { stroke!.tiles[index] = copy(tileRect(index)) }
+                if stroke!.tiles[index] == nil { stroke!.tiles[index] = copy(tileRect(index)); added.append(index) }
             }
         }
+        return added
     }
 
     private func copy(_ r: PixelRect) -> [UInt8] {
