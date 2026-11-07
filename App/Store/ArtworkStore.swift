@@ -14,8 +14,9 @@ struct ArtworkMeta: Codable, Identifiable, Hashable, Sendable {
     var isComplete: Bool { progress >= 1 }
 }
 
-/// One folder per artwork: `<root>/<uuid>/{template.bin, paint.png, paint-colors.bin, thumb.jpg, meta.json}`.
-/// `paint-colors.bin` only exists while some paint has a wrong colour (overpaint protection off).
+/// One folder per artwork: `<root>/<uuid>/{template.bin, paint.png, thumb.jpg, meta.json}`.
+/// While some paint has a wrong colour (overpaint protection off), `paint.png` carries the paint
+/// colours as a trailer, so both always change together.
 /// `meta.json` is written last, so a folder without it (crash mid-create) is simply skipped.
 @MainActor @Observable final class ArtworkStore {
     let directory: URL
@@ -74,12 +75,12 @@ struct ArtworkMeta: Codable, Identifiable, Hashable, Sendable {
 
     func paintData(_ id: UUID) -> Data? {
         guard let data = try? Data(contentsOf: folder(id).appending(path: "paint.png")), !data.isEmpty else { return nil }
-        return data
+        return Self.split(data).paint
     }
 
     func paintColorData(_ id: UUID) -> Data? {
-        guard let data = try? Data(contentsOf: folder(id).appending(path: "paint-colors.bin")), !data.isEmpty else { return nil }
-        return data
+        guard let data = try? Data(contentsOf: folder(id).appending(path: "paint.png")) else { return nil }
+        return Self.split(data).colors
     }
 
     /// Empty paint data or a nil thumbnail keep what is on disk — never overwrite good data with nothing.
@@ -88,7 +89,9 @@ struct ArtworkMeta: Codable, Identifiable, Hashable, Sendable {
         guard var meta = artworks.first(where: { $0.id == id }) else { return }
         let folder = folder(id)
         do {
-            if !paint.isEmpty { try commitPaint(paint, colors: colors, in: folder) }
+            if !paint.isEmpty {
+                try Self.join(paint, colors).write(to: folder.appending(path: "paint.png"), options: .atomic)
+            }
             if let thumbnail, !thumbnail.isEmpty {
                 try thumbnail.write(to: folder.appending(path: "thumb.jpg"), options: .atomic)
             }
@@ -118,7 +121,6 @@ struct ArtworkMeta: Codable, Identifiable, Hashable, Sendable {
     func restart(_ id: UUID, thumbnail: Data?) {
         guard var meta = artworks.first(where: { $0.id == id }) else { return }
         try? FileManager.default.removeItem(at: folder(id).appending(path: "paint.png"))
-        try? FileManager.default.removeItem(at: folder(id).appending(path: "paint-colors.bin"))
         if let thumbnail { try? thumbnail.write(to: folder(id).appending(path: "thumb.jpg"), options: .atomic) }
         meta.progress = 0
         meta.modified = Date()
@@ -136,27 +138,29 @@ struct ArtworkMeta: Codable, Identifiable, Hashable, Sendable {
 
     // MARK: Helpers
 
-    /// Writes paint and colours as a pair: both are staged first, so a failed write leaves the old
-    /// pair untouched, and the final renames replace each file atomically.
-    private func commitPaint(_ paint: Data, colors: Data?, in folder: URL) throws {
-        let fm = FileManager.default
-        let paintURL = folder.appending(path: "paint.png"), colorsURL = folder.appending(path: "paint-colors.bin")
-        let paintNew = folder.appending(path: "paint.png.new"), colorsNew = folder.appending(path: "paint-colors.bin.new")
-        do {
-            try paint.write(to: paintNew)
-            if let colors { try colors.write(to: colorsNew) }
-        } catch {
-            try? fm.removeItem(at: paintNew)
-            try? fm.removeItem(at: colorsNew)
-            throw error
-        }
-        if colors == nil { try? fm.removeItem(at: colorsURL) }
-        try Self.move(paintNew, over: paintURL)
-        if colors != nil { try Self.move(colorsNew, over: colorsURL) }
+    /// Paint colours ride at the end of `paint.png` (`colors`, length as UInt64 LE, magic), so paint
+    /// and colours are always written together in one atomic write. Image decoders ignore bytes
+    /// after the PNG end chunk, and files without the trailer simply have no colours.
+    private static let colorsMagic = Data("MNZCOLv1".utf8)
+
+    private static func join(_ paint: Data, _ colors: Data?) -> Data {
+        guard let colors else { return paint }
+        var out = paint
+        out.append(colors)
+        withUnsafeBytes(of: UInt64(colors.count).littleEndian) { out.append(contentsOf: $0) }
+        out.append(colorsMagic)
+        return out
     }
 
-    private static func move(_ source: URL, over destination: URL) throws {
-        guard rename(source.path, destination.path) == 0 else { throw CocoaError(.fileWriteUnknown) }
+    private static func split(_ blob: Data) -> (paint: Data, colors: Data?) {
+        let tail = colorsMagic.count + 8
+        guard blob.count > tail, blob.suffix(colorsMagic.count) == colorsMagic else { return (blob, nil) }
+        let lengthBytes = blob.dropLast(colorsMagic.count).suffix(8)
+        let length = lengthBytes.enumerated().reduce(UInt64(0)) { $0 | UInt64($1.element) << (8 * UInt64($1.offset)) }
+        guard length <= UInt64(blob.count - tail) else { return (blob, nil) }
+        let paintEnd = blob.count - tail - Int(length)
+        let start = blob.startIndex
+        return (Data(blob[start..<(start + paintEnd)]), Data(blob[(start + paintEnd)..<(start + paintEnd + Int(length))]))
     }
 
     private func writeMeta(_ meta: ArtworkMeta) throws {
