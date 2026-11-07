@@ -161,7 +161,7 @@ struct PaintCanvas: UIViewRepresentable { let session: PaintingSession }
   Auflösung der Farbebene: Gitter × 2 (wie Prototyp), Ränder vektor- oder
   höher aufgelöst, damit sie beim Zoomen nicht verpixeln.
 - **Eingabe:** Stift (`touch.type == .pencil`) malt. Finger malen **nicht**:
-  ein Finger verschiebt, zwei zoomen (Scroll-/Zoom-Verhalten wie `UIScrollView`,
+  ein Finger verschiebt, zwei zoomen und drehen (Scroll-/Zoom-Verhalten wie `UIScrollView`,
   0.5×–12×). Damit ist Handballen-Malen ausgeschlossen. **Fallback:** Solange
   noch nie ein Stift erkannt wurde, malt ein Finger (für Geräte ohne Stift und
   für App Review); sobald ein Stift malt, gilt Stift-malt/Finger-navigiert.
