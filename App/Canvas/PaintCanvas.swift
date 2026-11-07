@@ -183,8 +183,11 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
             isAtFit = false
             rotate(by: g.rotation, around: g.location(in: self))
             g.rotation = 0
-        case .ended, .cancelled, .failed:
+        case .ended:
             if rotationEngaged { snapRotation() }
+            rotationEngaged = false
+        case .cancelled, .failed:
+            // Cancelled when the pencil starts painting: the paper stays exactly where it is.
             rotationEngaged = false
         default:
             break
@@ -209,7 +212,7 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
         rotation = a
         let apply = { self.scrollView.transform = CGAffineTransform(rotationAngle: a) }
         if animated && !UIAccessibility.isReduceMotionEnabled {
-            UIView.animate(withDuration: 0.25, delay: 0, options: [.beginFromCurrentState, .curveEaseOut], animations: apply)
+            UIView.animate(withDuration: 0.25, delay: 0, options: [.beginFromCurrentState, .curveEaseOut, .allowUserInteraction], animations: apply)
         } else {
             apply()
         }
@@ -246,6 +249,8 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
             scrollView.panGestureRecognizer.isEnabled = false
             scrollView.pinchGestureRecognizer?.isEnabled = false
             rotationRecognizer.isEnabled = false
+            // A snap still running jumps to its end, so the paper does not turn under the pencil.
+            scrollView.layer.removeAllAnimations()
         }
         let radius = Double(session.brush.diameter / 2 / scrollView.zoomScale) * Double(PaintLayer.scale)
         session.beginStroke(radius: radius)
