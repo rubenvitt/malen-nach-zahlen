@@ -367,24 +367,6 @@ final class PaintLayer {
                        provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
     }
 
-    /// Grid-resolution image: the still open fields of `color` in that colour, the rest clear.
-    func openFieldsImage(color: Int) -> CGImage? {
-        guard color >= 0, color < template.palette.count else { return nil }
-        let gw = template.width, gh = template.height, c = template.palette[color]
-        var data = Data(count: gw * gh * 4)
-        data.withUnsafeMutableBytes { (out: UnsafeMutableRawBufferPointer) in
-            for i in 0..<(gw * gh) where Int(template.colorOfPixel[i]) == color
-                && !fieldComplete[Int(template.fieldOfPixel[i])] {
-                out[i * 4] = c.r; out[i * 4 + 1] = c.g; out[i * 4 + 2] = c.b; out[i * 4 + 3] = 255
-            }
-        }
-        guard let provider = CGDataProvider(data: data as CFData) else { return nil }
-        return CGImage(width: gw, height: gh, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: gw * 4,
-                       space: CGColorSpaceCreateDeviceRGB(),
-                       bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
-                       provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
-    }
-
     // MARK: PNG (8-bit grey coverage, not a viewable picture)
 
     func pngData() -> Data {

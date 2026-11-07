@@ -103,7 +103,6 @@ private struct PaintChrome: View {
                          isDone: session.completedColors.contains(index),
                          isSelected: session.selectedColor == index) {
                     withAnimation(Theme.spring) { session.selectedColor = index }
-                    session.pulseOpenFields()
                 }
             }
         }

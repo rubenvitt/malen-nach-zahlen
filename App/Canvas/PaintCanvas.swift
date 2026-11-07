@@ -13,7 +13,7 @@ struct PaintCanvas: UIViewRepresentable {
 /// Zoomable painting surface. Content coordinates are grid pixels (the content view is
 /// `template.width × template.height` points at zoom 1); the paint layer has 2 px per grid pixel.
 ///
-/// Layers, bottom to top: white + grey numbers (tiled, vector) → paint tiles → flash → borders
+/// Layers, bottom to top: white + grey numbers (tiled, vector) → paint tiles → borders
 /// (tiled, vector). Tiled layers redraw at the current zoom, so numbers and lines stay crisp.
 ///
 /// Input: the pencil paints, fingers pan (1), pinch and rotate (2). Until a pencil was ever seen, a
@@ -27,7 +27,6 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
     private let scrollView = UIScrollView()
     private var content = UIView()
     private var paintTiles: [CALayer] = []
-    private var flashLayer = CALayer()
     private let strokeRecognizer = StrokeRecognizer()
     private let rotationRecognizer = UIRotationGestureRecognizer()
     private var fitScale: CGFloat = 1
@@ -103,10 +102,7 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
                 paintTiles.append(tile)
             }
         }
-        flashLayer = CALayer()
-        flashLayer.magnificationFilter = .nearest
-        flashLayer.opacity = 0
-        for l in [numbers, paint, flashLayer, borders] {
+        for l in [numbers, paint, borders] {
             l.frame = content.bounds
             content.layer.addSublayer(l)
         }
@@ -327,24 +323,6 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
             }
         }
         CATransaction.commit()
-    }
-
-    func flashOpenFields(color: Int) {
-        guard let image = session.layer.openFieldsImage(color: color) else { return }
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        flashLayer.contents = image
-        CATransaction.commit()
-        let pulse = CAKeyframeAnimation(keyPath: "opacity")
-        if UIAccessibility.isReduceMotionEnabled {
-            pulse.values = [0, 0.45, 0]
-            pulse.duration = 0.8
-        } else {
-            pulse.values = [0, 0.6, 0.15, 0.6, 0]
-            pulse.duration = 1.4
-        }
-        pulse.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        flashLayer.add(pulse, forKey: "flash")
     }
 }
 
