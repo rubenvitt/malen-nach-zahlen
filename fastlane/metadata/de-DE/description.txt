@@ -24,3 +24,6 @@ GRATIS AUSPROBIEREN, EINMAL KAUFEN
 Die Motive und dein erstes eigenes Foto sind gratis. Für weitere Fotos schaltest du die Vollversion mit einem einmaligen Kauf frei: kein Abo, mit deiner Familie teilbar.
 
 Keine Werbung, kein Konto, keine Datensammlung. Deine Fotos verlassen dein iPad nicht.
+
+Nutzungsbedingungen (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
+Datenschutz: https://github.com/rubenvitt/malen-nach-zahlen/blob/main/PRIVACY.md

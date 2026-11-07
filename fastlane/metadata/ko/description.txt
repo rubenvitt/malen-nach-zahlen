@@ -24,3 +24,6 @@ Apple Pencil로 한 획씩 칠합니다. 번짐 방지가 색을 해당 영역 �
 기본 그림과 첫 번째 내 사진은 무료입니다. 더 많은 사진을 쓰려면 한 번의 구매로 정식 버전을 잠금 해제하세요. 구독 없음, 가족 공유 지원.
 
 광고 없음, 계정 없음, 데이터 수집 없음. 사진은 iPad 밖으로 나가지 않습니다.
+
+이용 약관(EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
+개인정보 처리방침: https://github.com/rubenvitt/malen-nach-zahlen/blob/main/PRIVACY.md

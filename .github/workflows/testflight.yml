@@ -66,7 +66,7 @@ jobs:
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-          TESTFLIGHT_GROUP: ${{ vars.TESTFLIGHT_GROUP }}
+          TESTFLIGHT_GROUP: ${{ vars.TESTFLIGHT_GROUP || 'Öffentlich' }}
           FASTLANE_SKIP_UPDATE_CHECK: "1"
           LC_ALL: en_US.UTF-8
           LANG: en_US.UTF-8
