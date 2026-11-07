@@ -14,7 +14,8 @@ struct ArtworkMeta: Codable, Identifiable, Hashable, Sendable {
     var isComplete: Bool { progress >= 1 }
 }
 
-/// One folder per artwork: `<root>/<uuid>/{template.bin, paint.png, thumb.jpg, meta.json}`.
+/// One folder per artwork: `<root>/<uuid>/{template.bin, paint.png, paint-colors.bin, thumb.jpg, meta.json}`.
+/// `paint-colors.bin` only exists while some paint has a wrong colour (overpaint protection off).
 /// `meta.json` is written last, so a folder without it (crash mid-create) is simply skipped.
 @MainActor @Observable final class ArtworkStore {
     let directory: URL
@@ -76,12 +77,23 @@ struct ArtworkMeta: Codable, Identifiable, Hashable, Sendable {
         return data
     }
 
+    func paintColorData(_ id: UUID) -> Data? {
+        guard let data = try? Data(contentsOf: folder(id).appending(path: "paint-colors.bin")), !data.isEmpty else { return nil }
+        return data
+    }
+
     /// Empty paint data or a nil thumbnail keep what is on disk — never overwrite good data with nothing.
-    func save(_ id: UUID, paint: Data, thumbnail: Data?, progress: Double) {
+    /// `colors` belongs to `paint`: nil means all paint has its own colour.
+    func save(_ id: UUID, paint: Data, colors: Data? = nil, thumbnail: Data?, progress: Double) {
         guard var meta = artworks.first(where: { $0.id == id }) else { return }
         let folder = folder(id)
         do {
-            if !paint.isEmpty { try paint.write(to: folder.appending(path: "paint.png"), options: .atomic) }
+            if !paint.isEmpty {
+                let colorsURL = folder.appending(path: "paint-colors.bin")
+                if let colors { try colors.write(to: colorsURL, options: .atomic) }
+                else { try? FileManager.default.removeItem(at: colorsURL) }
+                try paint.write(to: folder.appending(path: "paint.png"), options: .atomic)
+            }
             if let thumbnail, !thumbnail.isEmpty {
                 try thumbnail.write(to: folder.appending(path: "thumb.jpg"), options: .atomic)
             }
@@ -111,6 +123,7 @@ struct ArtworkMeta: Codable, Identifiable, Hashable, Sendable {
     func restart(_ id: UUID, thumbnail: Data?) {
         guard var meta = artworks.first(where: { $0.id == id }) else { return }
         try? FileManager.default.removeItem(at: folder(id).appending(path: "paint.png"))
+        try? FileManager.default.removeItem(at: folder(id).appending(path: "paint-colors.bin"))
         if let thumbnail { try? thumbnail.write(to: folder(id).appending(path: "thumb.jpg"), options: .atomic) }
         meta.progress = 0
         meta.modified = Date()

@@ -21,6 +21,9 @@ enum BrushSize: CaseIterable, Codable {
     let template: Template
     var selectedColor = 0
     var brush: BrushSize = .medium
+    /// Overpaint protection: paint only lands in fields of the selected colour. Off, it lands in
+    /// any field, and a wrong colour has to be painted over again.
+    var overpaintProtection = true
     private(set) var progressByColor: [Double]
     private(set) var progress: Double = 0
     private(set) var completedColors: Set<Int> = []
@@ -36,9 +39,10 @@ enum BrushSize: CaseIterable, Codable {
     @ObservationIgnored private var lastPublish: CFTimeInterval = 0
 
     /// `paintLayerPNG` is what `paintLayerPNG()` returned earlier; a PNG of the wrong size is ignored.
-    init(template: Template, paintLayerPNG: Data?) {
+    /// `paintColors` is what `paintColorData()` returned with it.
+    init(template: Template, paintLayerPNG: Data?, paintColors: Data? = nil) {
         self.template = template
-        layer = PaintLayer(template: template, png: paintLayerPNG)
+        layer = PaintLayer(template: template, png: paintLayerPNG, colors: paintColors)
         art = TemplateArt(template: template)
         progressByColor = Array(repeating: 0, count: template.palette.count)
         publish()
@@ -58,6 +62,10 @@ enum BrushSize: CaseIterable, Codable {
     /// Coverage of the paint layer as an 8-bit grey PNG (2 px per grid pixel). Not a viewable
     /// picture; use `renderFinished` for that. Round-trips exactly through `init`.
     func paintLayerPNG() -> Data { layer.pngData() }
+
+    /// Which colour the paint has, saved next to `paintLayerPNG()`. Nil while all paint has the
+    /// right colour, which is always the case with the overpaint protection on.
+    func paintColorData() -> Data? { layer.colorData() }
 
     /// The picture as painted so far, on white. `showLines` adds borders and the numbers that are
     /// still readable at that size. `maxSide` is the longest side in pixels.
@@ -85,7 +93,8 @@ enum BrushSize: CaseIterable, Codable {
     // MARK: Used by PaintCanvasView (points and radius in paint pixels)
 
     func beginStroke(radius: Double) {
-        layer.beginStroke(color: min(max(0, selectedColor), template.palette.count - 1), radius: radius)
+        layer.beginStroke(color: min(max(0, selectedColor), template.palette.count - 1), radius: radius,
+                          protected: overpaintProtection)
     }
 
     func continueStroke(_ points: [CGPoint], predicted: [CGPoint]) -> PixelRect? {

@@ -13,19 +13,25 @@ import Testing
     s.beginStroke(radius: 4)
     _ = s.continueStroke([CGPoint(x: 0, y: 4), CGPoint(x: 16, y: 4)], predicted: [])
     _ = s.endStroke()
-    #expect(fields.sorted() == [0, 2])
+    #expect(fields == [0])                 // one stroke stays in one field
+    #expect(colors.isEmpty)
+    s.beginStroke(radius: 4)
+    _ = s.continueStroke([CGPoint(x: 12, y: 4)], predicted: [])
+    _ = s.endStroke()
+    #expect(fields == [0, 2])
     #expect(colors == [0])
-    #expect(ends == 1)
+    #expect(ends == 2)
     #expect(s.completedColors == [0])
     #expect(s.progressByColor == [1, 0])
     #expect(s.canUndo)
     #expect(!s.isComplete)
 
     s.undo()
+    s.undo()
     #expect(s.progress == 0)
     #expect(s.completedColors.isEmpty)
     #expect(!s.canUndo)
-    #expect(ends == 2)
+    #expect(ends == 4)
 
     // A stroke in a foreign colour's field changes nothing and is no undo step.
     s.selectedColor = 1
@@ -33,7 +39,16 @@ import Testing
     _ = s.continueStroke([CGPoint(x: 1, y: 1)], predicted: [])
     _ = s.endStroke()
     #expect(!s.canUndo)
-    #expect(ends == 2)
+    #expect(ends == 4)
+
+    // Without the overpaint protection it lands there, but does not count.
+    s.overpaintProtection = false
+    s.beginStroke(radius: 2)
+    _ = s.continueStroke([CGPoint(x: 1, y: 1)], predicted: [])
+    _ = s.endStroke()
+    #expect(s.canUndo)
+    #expect(s.progress == 0)
+    #expect(s.paintColorData() != nil)
 }
 
 @MainActor @Test func sessionPNGRoundTripAndRender() {
