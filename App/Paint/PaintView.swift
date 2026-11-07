@@ -59,7 +59,13 @@ struct PaintView: View {
     private func load() async {
         guard session == nil else { return }
         guard let template = try? await store.loadTemplate(id) else { failed = true; return }
-        let session = PaintingSession(template: template, paintLayerPNG: store.paintData(id),
+        var paint = store.paintData(id)
+        #if DEBUG
+        if paint == nil, ProcessInfo.processInfo.arguments.contains("-uiTestPrefill") {
+            paint = ScreenshotPrefill.paintLayerPNG(for: template)
+        }
+        #endif
+        let session = PaintingSession(template: template, paintLayerPNG: paint,
                                       paintColors: store.paintColorData(id))
         session.overpaintProtection = overpaintProtection
         let saver = Autosaver(id: id, store: store, session: session)
@@ -71,6 +77,7 @@ struct PaintView: View {
         self.session = session
         autosaver = saver
         #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-uiTestPrefill") { saver.changed() }   // gallery shows it painted
         if ProcessInfo.processInfo.arguments.contains("-uiTestShowCompletion") { completion = .celebrate; return }
         #endif
         if session.isComplete { completion = .look }
@@ -137,7 +144,7 @@ private struct PaintChrome: View {
                     .accessibilityIdentifier("backToGallery")
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).font(.rounded(.headline, weight: .bold)).lineLimit(1)
-                    Text(session.progress, format: .percent.precision(.fractionLength(0)).locale(Locale(identifier: "de_DE")))
+                    Text(session.progress, format: .percent.precision(.fractionLength(0)))
                         .font(.rounded(.subheadline, weight: .medium))
                         .monospacedDigit()
                         .foregroundStyle(Theme.softInk)
@@ -197,7 +204,7 @@ private struct PaintChrome: View {
 
 struct RoundButton: View {
     let systemImage: String
-    let label: String
+    let label: LocalizedStringKey
     let action: () -> Void
 
     var body: some View {
@@ -216,6 +223,8 @@ struct RoundButton: View {
 private struct BrushPicker: View {
     @Binding var brush: BrushSize
 
+    private static var labels: [LocalizedStringKey] { ["Dünner Pinsel", "Mittlerer Pinsel", "Dicker Pinsel"] }
+
     var body: some View {
         HStack(spacing: 2) {
             ForEach(Array(BrushSize.allCases.enumerated()), id: \.offset) { i, size in
@@ -228,7 +237,7 @@ private struct BrushPicker: View {
                         .contentShape(Circle())
                 }
                 .buttonStyle(PressableStyle())
-                .accessibilityLabel(["Dünner Pinsel", "Mittlerer Pinsel", "Dicker Pinsel"][i])
+                .accessibilityLabel(Self.labels[i])
                 .accessibilityAddTraits(brush == size ? .isSelected : [])
             }
         }

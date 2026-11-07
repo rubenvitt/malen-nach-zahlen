@@ -13,10 +13,14 @@ packages:
   PaintEngine:
     path: Packages/PaintEngine
 
+# Local StoreKit test products for runs from Xcode; not part of the app bundle.
+fileGroups:
+  - StoreKit
+
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    MARKETING_VERSION: "0.1"
+    MARKETING_VERSION: "1.0"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_STRICT_CONCURRENCY: complete
     ENABLE_USER_SCRIPT_SANDBOXING: YES
@@ -88,6 +92,7 @@ schemes:
         Malen: all
     run:
       config: Debug
+      storeKitConfiguration: StoreKit/Malen.storekit
     test:
       config: Debug
       gatherCoverageData: true

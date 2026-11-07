@@ -4,6 +4,7 @@ import PaintEngine
 @main
 struct MalenApp: App {
     @State private var store: ArtworkStore
+    @State private var fullVersion: FullVersion
     @State private var path: [Route] = []
 
     init() {
@@ -13,6 +14,8 @@ struct MalenApp: App {
             let args = ProcessInfo.processInfo.arguments
             if args.contains("-uiTestFixedTemplate") { Self.injectFixture(into: store) }
             _store = State(initialValue: store)
+            // Fresh counter per run, so one UI test's photo never uses up the next test's free photo.
+            _fullVersion = State(initialValue: FullVersion(defaults: UserDefaults(suiteName: UUID().uuidString) ?? .standard))
             if args.contains("-uiTestOpenPaint"), let first = store.artworks.first {
                 _path = State(initialValue: [.paint(first.id)])
             } else if args.contains("-uiTestOpenEditor") {
@@ -22,6 +25,7 @@ struct MalenApp: App {
         }
         #endif
         _store = State(initialValue: .applicationSupport())
+        _fullVersion = State(initialValue: FullVersion())
     }
 
     var body: some Scene {
@@ -38,6 +42,8 @@ struct MalenApp: App {
                     }
             }
             .environment(store)
+            .environment(fullVersion)
+            .task { fullVersion.start() }
         }
     }
 

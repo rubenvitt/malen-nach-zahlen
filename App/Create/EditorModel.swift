@@ -8,10 +8,10 @@ struct Motif: Identifiable, Hashable, Sendable {
     let title: String
 
     static let all = [
-        Motif(id: "motif-fox", title: "Fuchs im Herbstwald"),
-        Motif(id: "motif-lighthouse", title: "Leuchtturm"),
-        Motif(id: "motif-flowers", title: "Blumenstrauß"),
-        Motif(id: "motif-balloons", title: "Heißluftballons"),
+        Motif(id: "motif-fox", title: String(localized: "Fuchs im Herbstwald")),
+        Motif(id: "motif-lighthouse", title: String(localized: "Leuchtturm")),
+        Motif(id: "motif-flowers", title: String(localized: "Blumenstrauß")),
+        Motif(id: "motif-balloons", title: String(localized: "Heißluftballons")),
     ]
 
     @MainActor var image: UIImage? { UIImage(named: id) }
@@ -57,7 +57,7 @@ enum EditorSource: Hashable {
                 guard let cg = motif.image?.cgImage else { throw RGBAImage.LoadError.undecodable }
                 rgba = try await Task.detached(priority: .userInitiated) { try RGBAImage(cgImage: cg) }.value
             case .photo(let item):
-                title = "Foto vom \(Date.now.formatted(.dateTime.day().month(.wide).locale(Locale(identifier: "de_DE"))))"
+                title = String(localized: "Foto vom \(Date.now.formatted(.dateTime.day().month(.wide)))")
                 guard let data = try await item.loadTransferable(type: Data.self) else { throw RGBAImage.LoadError.undecodable }
                 rgba = try await Task.detached(priority: .userInitiated) { try RGBAImage(data: data) }.value
             }

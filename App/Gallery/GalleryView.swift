@@ -79,8 +79,8 @@ struct GalleryView: View {
 
     private var dialogTitle: String {
         switch pending {
-        case .delete(let m): "„\(m.title)“ löschen?"
-        case .restart(let m): "„\(m.title)“ neu starten?"
+        case .delete(let m): String(localized: "„\(m.title)“ löschen?")
+        case .restart(let m): String(localized: "„\(m.title)“ neu starten?")
         case nil: ""
         }
     }
@@ -97,7 +97,7 @@ struct GalleryView: View {
         .padding(.top, 12)
     }
 
-    private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
+    private func section(_ title: LocalizedStringKey, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(title).font(.rounded(.title2, weight: .bold)).foregroundStyle(Theme.ink)
                 .accessibilityAddTraits(.isHeader)
@@ -226,7 +226,7 @@ private struct ArtworkCard: View {
     }
 
     private var progressText: String {
-        meta.isComplete ? "fertig" : meta.progress.formatted(.percent.precision(.fractionLength(0)).locale(Locale(identifier: "de_DE")))
+        meta.isComplete ? String(localized: "fertig") : meta.progress.formatted(.percent.precision(.fractionLength(0)))
     }
 }
 

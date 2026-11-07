@@ -33,7 +33,8 @@ Referenz, bis der Swift-Port gleichwertig ist.
 ## 2. Nicht-Ziele (v1) **(Claude)**
 
 - iPhone, Mac, Vision Pro. Nur iPad (`TARGETED_DEVICE_FAMILY: 2`).
-- iCloud-Sync, Konto, Teilen von Vorlagen zwischen Geräten, Käufe, Werbung.
+- iCloud-Sync, Konto, Teilen von Vorlagen zwischen Geräten, Werbung, Abos.
+  *(Nachtrag 2026-11-07: Käufe gibt es doch, als einmalige Vollversion, siehe §9.)*
 - Druckstärke, Pinsel-Texturen, Mischfarben, freie Farbwahl. Farben kommen nur
   aus der Palette der Vorlage.
 - Kategorie „Kinder" im App Store (bringt zusätzliche Review-Regeln).
@@ -222,7 +223,9 @@ Absturz.
 - Barrierefreiheit: Töpfe mit VoiceOver-Label „Farbe 3, 40 % fertig", Dynamic
   Type in Galerie/Editor, Kontrast der Nummern ausreichend.
 - Sprache der Oberfläche: Deutsch (Entwicklungssprache `de`), Texte kurz und
-  freundlich, du-Form.
+  freundlich, du-Form. *Nachtrag 2026-11-07 (Ruben):* zum Start in denselben
+  neun Sprachen wie Sudoku (de, en, fr, es, it, ja, ko, nl, pt-BR), String Catalogs
+  `App/Localizable.xcstrings` und `App/InfoPlist.xcstrings`.
 
 ## 6. Mitgelieferte Motive & Icon **(Claude)**
 
@@ -241,7 +244,7 @@ Absturz.
   `ASC_KEY_P8_BASE64`, Variable `TESTFLIGHT_GROUP`.
 - **App Store Connect:** App-Datensatz „Griffel Malen nach Zahlen",
   `dev.rubeen.malen`, Primärsprache Deutsch, Kategorie Unterhaltung (Zweit:
-  Grafik und Design), kostenlos. Externe Gruppe „Öffentlich" mit öffentlichem
+  Grafik und Design), kostenlos mit In-App-Kauf (§9). Externe Gruppe „Öffentlich" mit öffentlichem
   Link, Beta-App-Beschreibung, Datenschutz-URL = `PRIVACY.md` auf GitHub.
 - **App-Store-fähig von Anfang an:** `PrivacyInfo.xcprivacy` (keine Daten,
   benutzte Required-Reason-APIs deklariert), `ITSAppUsesNonExemptEncryption NO`,
@@ -249,6 +252,33 @@ Absturz.
 
 ## 8. Offen / bewusst später
 
-- App-Store-Einreichung selbst (Screenshots, Texte) – nach TestFlight-Feedback.
+- ~~App-Store-Einreichung selbst (Screenshots, Texte)~~ – erledigt 2026-11-07, siehe
+  [`docs/app-store.md`](../../app-store.md).
 - iPhone-Layout.
 - Eigene Farbe für ein Feld wählen, Pinsel-Texturen.
+
+## 9. Geschäftsmodell (2026-11-07)
+
+**Gratis laden, einmal freischalten (Ruben).** Keine Werbung **(Ruben)**, kein Abo.
+Griffel-Haltung wie bei Sudoku: einmal zahlen, keine Daten, kein Konto.
+
+- **Gratis (Ruben: ein Foto):** die 4 Motive und **1 Bild aus einem eigenen Foto**,
+  mit allen Funktionen. Begrenzt wird die Menge, nicht die Qualität: Farben,
+  Details, Übermalschutz und Teilen sind nie gesperrt **(Claude)**. Das erste
+  Erlebnis „mein Foto wird ein Malbild“ soll das beste sein.
+- **Vollversion:** ein nicht verbrauchbarer In-App-Kauf
+  `dev.rubeen.malen.unlock`, Familienfreigabe an, Vorschlag 6,99 € **(Claude)**.
+  Schaltet unbegrenzt eigene Fotos frei.
+- **Zählen (Claude):** Ein Foto zählt, wenn „Los geht's“ das Bild anlegt. Fotos und
+  Schieber im Editor ausprobieren ist frei. Der Zähler wächst nur (Löschen gibt
+  kein Gratis-Foto zurück) und liegt in `UserDefaults`; nach Neuinstallation
+  beginnt er neu, das ist in Ordnung.
+- **Kaufseite statt Popup (Claude, Anti-Ziel §3):** erscheint nur, wenn „Los
+  geht's“ ein weiteres eigenes Foto anlegen würde. Der Knopf zeigt dann ein
+  Schloss, darunter ein Satz, warum. Nach dem Kauf geht es direkt weiter ins Bild.
+  Die Seite hat „Käufe wiederherstellen“ (Pflicht bei nicht verbrauchbaren Käufen).
+- **Technik:** StoreKit 2 (`Transaction.currentEntitlements`, `Transaction.updates`,
+  SwiftUI-`purchase`-Aktion), kein Server, keine Fremdbibliothek. Die
+  Datenschutz-Angabe bleibt „Keine Daten erhoben“. Code in `App/Purchase/`,
+  Testprodukt in `StoreKit/Malen.storekit`.
+- **Bewusst später:** Motiv-Pakete als weitere Käufe, wenn sich die Vollversion trägt.

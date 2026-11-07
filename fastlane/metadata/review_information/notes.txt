@@ -1,0 +1,7 @@
+No login or demo account needed. The app works fully offline and collects no data.
+
+How to use: pick one of the four bundled motifs (or "New Picture" for an own photo), adjust colors and detail, tap "Let's Go" and paint. Painting works with Apple Pencil; on a device where no pencil has been used yet, a finger paints too (once a pencil paints, fingers pan, zoom and rotate).
+
+In-app purchase: the bundled motifs and the first picture made from an own photo are free. Creating a picture from a second own photo opens the purchase sheet for the non-consumable "Full Version" (dev.rubeen.malen.unlock), which unlocks any number of own photos. To reach it: tap "New Picture", pick any photo, tap "Let's Go", go back to the gallery and repeat with a second photo; "Let's Go" now shows a lock and opens the sheet. The sheet also offers "Restore Purchases".
+
+The app follows the device language: German, English, French, Spanish, Italian, Japanese, Korean, Dutch or Portuguese (Brazil).
