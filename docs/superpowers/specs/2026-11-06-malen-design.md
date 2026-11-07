@@ -21,9 +21,9 @@ Referenz, bis der Swift-Port gleichwertig ist.
   Nummer. Über den Rand und in fremde Felder malen geht nicht **(Claude: strenge
   Auslegung, wie im Prototyp)**. *Nachtrag 2026-11-07 (Ruben):* Der Übermalschutz
   ist im Spiel umschaltbar (Schild-Knopf oben, Standard an, gilt für alle Bilder).
-  Aus heißt: Farbe landet in jedem Feld, eine falsche Farbe zählt nicht und muss mit
-  der richtigen übermalt werden. Immer gilt: Ein Strich bleibt in dem einen Feld,
-  in dem er ansetzt.
+  An heißt: Ein Strich bleibt in dem einen Feld der gewählten Nummer, in dem er
+  ansetzt. Aus heißt: keine Felder, man malt frei über alles (nur fertige Felder
+  bleiben gesperrt); falsche Farbe zählt nicht und muss richtig übermalt werden.
 - **Dünner schwarzer Rand (Ruben)** um jedes Feld, immer über der Farbe.
 - **Farbanzahl beim Erstellen einstellbar, mit Live-Vorschau (Ruben).** Schieber
   bewegen → Vorschau der Vorlage aktualisiert sich währenddessen.

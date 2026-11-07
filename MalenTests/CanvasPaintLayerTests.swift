@@ -77,23 +77,28 @@ private func strokeAcross(_ l: PaintLayer, color: Int, y: CGFloat, radius: Doubl
     #expect(cov(l, gridX: 4, gridY: 0).allSatisfy { $0 == 0 })
 }
 
-@Test func unprotectedStrokePaintsForeignFieldWithoutProgress() {
+@Test func unprotectedStrokeCrossesAllFieldsButCountsOnlyItsColour() {
     let l = PaintLayer(template: canvasTestTemplate())
-    l.beginStroke(color: 0, radius: 3, protected: false)
-    _ = l.continueStroke([CGPoint(x: 9, y: 1), CGPoint(x: 15, y: 1)])   // field 1, colour 1
+    l.beginStroke(color: 0, radius: 4, protected: false)
+    _ = l.continueStroke([CGPoint(x: 0, y: 4), CGPoint(x: 16, y: 4)])   // fields 0, 1, 2
     #expect(l.endStroke().committed)
-    #expect(cov(l, gridX: 7, gridY: 0).allSatisfy { $0 > 0 })
-    #expect(l.paintColor[1 * l.width + 15] == 0)
-    #expect(cov(l, gridX: 5, gridY: 1).allSatisfy { $0 == 0 })          // field 2 stays clean
-    #expect(cov(l, gridX: 3, gridY: 0).allSatisfy { $0 == 0 })          // and so does field 0
+    #expect(cov(l, gridX: 4, gridY: 1).allSatisfy { $0 == 255 })      // field 1, wrong colour
+    #expect(l.paintColor[2 * l.width + 8] == 0)
     #expect(l.paintedOfField[1] == 0)
-    #expect(l.progress == 0)
-    // The right colour paints over it and counts.
+    #expect(l.progress(ofColor: 1) == 0)
+    #expect(l.fieldComplete[0] && l.fieldComplete[2])               // right colour counts as usual
+    // The right colour paints over the wrong one and counts.
     l.beginStroke(color: 1, radius: 3)
     _ = l.continueStroke([CGPoint(x: 9, y: 1), CGPoint(x: 15, y: 1)])
     _ = l.endStroke()
     #expect(l.paintColor[1 * l.width + 15] == 1)
     #expect(l.paintedOfField[1] > 0)
+    // Finished fields stay locked even without protection.
+    let done = l.coverage
+    l.beginStroke(color: 1, radius: 2, protected: false)
+    _ = l.continueStroke([CGPoint(x: 2, y: 4)])
+    #expect(!l.endStroke().committed)
+    #expect(l.coverage == done)
 }
 
 @Test func wrongColourOverRightPaintTakesProgressBackAndUndoRestoresIt() {

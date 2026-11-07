@@ -26,10 +26,9 @@ struct StrokeChange: Sendable {
 /// The paint bitmap and all progress bookkeeping, without any UIKit.
 ///
 /// Per paint pixel the layer stores *coverage* (alpha 0...255) and the palette index of the paint
-/// (`paintColor`). With the overpaint protection on, paint only lands in fields of its own colour,
-/// so `paintColor` always equals the template colour there; with it off, a field can hold a wrong
-/// colour, which does not count as painted. Either way one stroke stays inside the one field it
-/// started in.
+/// (`paintColor`). With the overpaint protection on, a stroke stays inside the one field of its own
+/// colour it started in, so `paintColor` always equals the template colour there. With it off,
+/// paint goes anywhere except finished fields; a wrong colour does not count as painted.
 final class PaintLayer {
     /// Paint pixels per grid pixel (as in the web prototype).
     static let scale = 2
@@ -62,7 +61,7 @@ final class PaintLayer {
     private var strokeColor = 0
     private var strokeRadius = 1.0
     private var strokeProtected = true
-    private var strokeField: Int?     // the one field this stroke may paint, fixed at its first hit
+    private var strokeField: Int?     // protected: the one field this stroke may paint, fixed at its first hit
     private var lastPoint: CGPoint?
     private var preview: (rect: PixelRect, pixels: [UInt8])?
 
@@ -147,14 +146,17 @@ final class PaintLayer {
         lastPoint = nil
     }
 
-    /// The field under `p` if this stroke may paint it: open, and of the stroke's colour when protected.
+    /// The open field of the stroke's colour under `p`, which a protected stroke then keeps to.
     private func acceptingField(at p: CGPoint) -> Int? {
         let x = Int(p.x.rounded(.down)), y = Int(p.y.rounded(.down))
         guard x >= 0, y >= 0, x < width, y < height else { return nil }
         let f = Int(template.fieldOfPixel[(y >> 1) * template.width + (x >> 1)])
-        guard !fieldComplete[f], !strokeProtected || Int(template.colorOfField[f]) == strokeColor else { return nil }
+        guard !fieldComplete[f], Int(template.colorOfField[f]) == strokeColor else { return nil }
         return f
     }
+
+    /// Unprotected strokes paint everywhere; protected ones first need their field.
+    private var strokeCanPaint: Bool { !strokeProtected || strokeField != nil }
 
     /// Commits a segment chain through `points` and shows `predicted` as a temporary preview that
     /// never counts towards progress, undo or export.
@@ -163,8 +165,8 @@ final class PaintLayer {
         var change = StrokeChange(dirty: clearPreview())
         var touched = Set<Int32>()
         for p in points {
-            if strokeField == nil {
-                // Until the pencil reaches a field it may paint, nothing happens.
+            if !strokeCanPaint {
+                // Until the pencil reaches an open field of its colour, nothing happens.
                 guard let f = acceptingField(at: p) else { continue }
                 strokeField = f
             }
@@ -173,7 +175,7 @@ final class PaintLayer {
             lastPoint = p
         }
         completeFields(touched, into: &change)
-        if var a = lastPoint, strokeField != nil, !predicted.isEmpty {
+        if var a = lastPoint, strokeCanPaint, !predicted.isEmpty {
             // Back up the whole area first so the preview can be taken back byte-exactly.
             let bound = predicted.reduce(boundsOfSegment(a, a)) { $0.union(boundsOfSegment($1, $1)) }
             if !bound.isEmpty {
@@ -242,17 +244,18 @@ final class PaintLayer {
                          y1: min(height, Int((max(a.y, b.y) + r).rounded(.up))))
     }
 
-    /// Anti-aliased round-capped segment, clipped to `strokeField`. Paint of the same colour is
-    /// max-combined; another colour is painted over where the new paint is solid enough.
+    /// Anti-aliased round-capped segment, clipped to `strokeField` when protected and always to open
+    /// fields. Paint of the same colour is max-combined; another colour is painted over
+    /// where the new paint is solid enough.
     private func rasterize(from a: CGPoint, to b: CGPoint, commit: Bool, touched: inout Set<Int32>) -> PixelRect? {
         let box = boundsOfSegment(a, b)
-        guard !box.isEmpty, strokeColor < template.palette.count,
-              let field = strokeField, !fieldComplete[field] else { return nil }
+        guard !box.isEmpty, strokeColor < template.palette.count, strokeCanPaint else { return nil }
+        let protected = strokeProtected, only = Int32(strokeField ?? -1)
         let saved = commit ? saveTiles(box) : []
         let r = strokeRadius, ax = Double(a.x), ay = Double(a.y)
         let dx = Double(b.x) - ax, dy = Double(b.y) - ay
         let len2 = dx * dx + dy * dy
-        let gw = template.width, color = UInt8(strokeColor), w = width, field32 = Int32(field)
+        let gw = template.width, color = UInt8(strokeColor), w = width
         var changed = false
         template.colorOfPixel.withUnsafeBufferPointer { colorOf in
         template.fieldOfPixel.withUnsafeBufferPointer { fieldOf in
@@ -262,7 +265,7 @@ final class PaintLayer {
                 let py = Double(y) + 0.5, grow = (y >> 1) * gw
                 for x in box.x0..<box.x1 {
                     let gi = grow + (x >> 1)
-                    guard fieldOf[gi] == field32 else { continue }
+                    guard !protected || fieldOf[gi] == only else { continue }
                     let px = Double(x) + 0.5
                     var t = len2 > 0 ? ((px - ax) * dx + (py - ay) * dy) / len2 : 0
                     t = min(1, max(0, t))
@@ -277,7 +280,8 @@ final class PaintLayer {
                         // A soft brush edge must not wash out solid paint of another colour.
                         guard new >= Self.covered || new > old else { continue }
                     }
-                    if commit && fieldComplete[field] { continue }
+                    let field = Int(fieldOf[gi])
+                    if fieldComplete[field] { continue }
                     cov[i] = new
                     col[i] = color
                     changed = true
@@ -288,6 +292,7 @@ final class PaintLayer {
                         let was = old >= Self.covered && oldColor == right
                         let now = new >= Self.covered && color == right
                         if was != now {
+                            let field32 = Int32(field)
                             if stroke?.fields[field32] == nil {
                                 stroke?.fields[field32] = (paintedOfField[field], fieldComplete[field])
                             }
