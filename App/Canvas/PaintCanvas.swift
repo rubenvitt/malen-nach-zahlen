@@ -218,6 +218,18 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
         }
     }
 
+    /// Stops a running snap (or "Ganzes Bild") where it is on screen, so the paper does not move
+    /// under a pencil that just touched down.
+    private func freezeRunningAnimation() {
+        let layer = scrollView.layer
+        guard layer.animationKeys()?.isEmpty == false, let shown = layer.presentation() else { return }
+        let angle = atan2(shown.transform.m12, shown.transform.m11)
+        let origin = shown.bounds.origin
+        layer.removeAllAnimations()
+        setRotation(angle, animated: false)
+        scrollView.contentOffset = origin
+    }
+
     /// Close to straight (or a quarter turn), the paper settles exactly there.
     private func snapRotation() {
         let quarter = CGFloat.pi / 2
@@ -249,8 +261,7 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
             scrollView.panGestureRecognizer.isEnabled = false
             scrollView.pinchGestureRecognizer?.isEnabled = false
             rotationRecognizer.isEnabled = false
-            // A snap still running jumps to its end, so the paper does not turn under the pencil.
-            scrollView.layer.removeAllAnimations()
+            freezeRunningAnimation()
         }
         let radius = Double(session.brush.diameter / 2 / scrollView.zoomScale) * Double(PaintLayer.scale)
         session.beginStroke(radius: radius)
