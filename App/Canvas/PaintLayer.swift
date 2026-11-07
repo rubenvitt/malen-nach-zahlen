@@ -81,14 +81,14 @@ final class PaintLayer {
             for x in 0..<width { paintColor[y * width + x] = template.colorOfPixel[grow + (x >> 1)] }
         }
 
-        let fields = template.sizeOfField.count, colors = template.palette.count
+        let fields = template.sizeOfField.count, colorCount = template.palette.count
         paintedOfField = [Int32](repeating: 0, count: fields)
         fieldComplete = [Bool](repeating: false, count: fields)
         fieldBounds = Array(repeating: (Int.max, Int.max, 0, 0), count: fields)
-        paintedOfColor = [Int](repeating: 0, count: colors)
-        sizeOfColor = [Int](repeating: 0, count: colors)
-        completeFieldsOfColor = [Int](repeating: 0, count: colors)
-        fieldsOfColor = [Int](repeating: 0, count: colors)
+        paintedOfColor = [Int](repeating: 0, count: colorCount)
+        sizeOfColor = [Int](repeating: 0, count: colorCount)
+        completeFieldsOfColor = [Int](repeating: 0, count: colorCount)
+        fieldsOfColor = [Int](repeating: 0, count: colorCount)
 
         let w = template.width
         for i in 0..<(w * template.height) {
