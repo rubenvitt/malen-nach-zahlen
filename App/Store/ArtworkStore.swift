@@ -14,7 +14,8 @@ struct ArtworkMeta: Codable, Identifiable, Hashable, Sendable {
     var isComplete: Bool { progress >= 1 }
 }
 
-/// One folder per artwork: `<root>/<uuid>/{template.bin, paint.png, thumb.jpg, meta.json}`.
+/// One folder per artwork: `<root>/<uuid>/{template.bin, paint.png, paint-colors.bin, thumb.jpg, meta.json}`.
+/// `paint-colors.bin` only exists while some paint has a wrong colour (overpaint protection off).
 /// `meta.json` is written last, so a folder without it (crash mid-create) is simply skipped.
 @MainActor @Observable final class ArtworkStore {
     let directory: URL
@@ -76,12 +77,18 @@ struct ArtworkMeta: Codable, Identifiable, Hashable, Sendable {
         return data
     }
 
+    func paintColorData(_ id: UUID) -> Data? {
+        guard let data = try? Data(contentsOf: folder(id).appending(path: "paint-colors.bin")), !data.isEmpty else { return nil }
+        return data
+    }
+
     /// Empty paint data or a nil thumbnail keep what is on disk — never overwrite good data with nothing.
-    func save(_ id: UUID, paint: Data, thumbnail: Data?, progress: Double) {
+    /// `colors` belongs to `paint`: nil means all paint has its own colour.
+    func save(_ id: UUID, paint: Data, colors: Data? = nil, thumbnail: Data?, progress: Double) {
         guard var meta = artworks.first(where: { $0.id == id }) else { return }
         let folder = folder(id)
         do {
-            if !paint.isEmpty { try paint.write(to: folder.appending(path: "paint.png"), options: .atomic) }
+            if !paint.isEmpty { try commitPaint(paint, colors: colors, in: folder) }
             if let thumbnail, !thumbnail.isEmpty {
                 try thumbnail.write(to: folder.appending(path: "thumb.jpg"), options: .atomic)
             }
@@ -111,6 +118,7 @@ struct ArtworkMeta: Codable, Identifiable, Hashable, Sendable {
     func restart(_ id: UUID, thumbnail: Data?) {
         guard var meta = artworks.first(where: { $0.id == id }) else { return }
         try? FileManager.default.removeItem(at: folder(id).appending(path: "paint.png"))
+        try? FileManager.default.removeItem(at: folder(id).appending(path: "paint-colors.bin"))
         if let thumbnail { try? thumbnail.write(to: folder(id).appending(path: "thumb.jpg"), options: .atomic) }
         meta.progress = 0
         meta.modified = Date()
@@ -127,6 +135,29 @@ struct ArtworkMeta: Codable, Identifiable, Hashable, Sendable {
     }
 
     // MARK: Helpers
+
+    /// Writes paint and colours as a pair: both are staged first, so a failed write leaves the old
+    /// pair untouched, and the final renames replace each file atomically.
+    private func commitPaint(_ paint: Data, colors: Data?, in folder: URL) throws {
+        let fm = FileManager.default
+        let paintURL = folder.appending(path: "paint.png"), colorsURL = folder.appending(path: "paint-colors.bin")
+        let paintNew = folder.appending(path: "paint.png.new"), colorsNew = folder.appending(path: "paint-colors.bin.new")
+        do {
+            try paint.write(to: paintNew)
+            if let colors { try colors.write(to: colorsNew) }
+        } catch {
+            try? fm.removeItem(at: paintNew)
+            try? fm.removeItem(at: colorsNew)
+            throw error
+        }
+        if colors == nil { try? fm.removeItem(at: colorsURL) }
+        try Self.move(paintNew, over: paintURL)
+        if colors != nil { try Self.move(colorsNew, over: colorsURL) }
+    }
+
+    private static func move(_ source: URL, over destination: URL) throws {
+        guard rename(source.path, destination.path) == 0 else { throw CocoaError(.fileWriteUnknown) }
+    }
 
     private func writeMeta(_ meta: ArtworkMeta) throws {
         try Self.encoder.encode(meta).write(to: folder(meta.id).appending(path: "meta.json"), options: .atomic)
