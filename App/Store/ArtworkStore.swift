@@ -15,6 +15,8 @@ struct ArtworkMeta: Codable, Identifiable, Hashable, Sendable {
 }
 
 /// One folder per artwork: `<root>/<uuid>/{template.bin, paint.png, thumb.jpg, meta.json}`.
+/// While some paint has a wrong colour (overpaint protection off), `paint.png` carries the paint
+/// colours as a trailer, so both always change together.
 /// `meta.json` is written last, so a folder without it (crash mid-create) is simply skipped.
 @MainActor @Observable final class ArtworkStore {
     let directory: URL
@@ -73,15 +75,23 @@ struct ArtworkMeta: Codable, Identifiable, Hashable, Sendable {
 
     func paintData(_ id: UUID) -> Data? {
         guard let data = try? Data(contentsOf: folder(id).appending(path: "paint.png")), !data.isEmpty else { return nil }
-        return data
+        return Self.split(data).paint
+    }
+
+    func paintColorData(_ id: UUID) -> Data? {
+        guard let data = try? Data(contentsOf: folder(id).appending(path: "paint.png")) else { return nil }
+        return Self.split(data).colors
     }
 
     /// Empty paint data or a nil thumbnail keep what is on disk — never overwrite good data with nothing.
-    func save(_ id: UUID, paint: Data, thumbnail: Data?, progress: Double) {
+    /// `colors` belongs to `paint`: nil means all paint has its own colour.
+    func save(_ id: UUID, paint: Data, colors: Data? = nil, thumbnail: Data?, progress: Double) {
         guard var meta = artworks.first(where: { $0.id == id }) else { return }
         let folder = folder(id)
         do {
-            if !paint.isEmpty { try paint.write(to: folder.appending(path: "paint.png"), options: .atomic) }
+            if !paint.isEmpty {
+                try Self.join(paint, colors).write(to: folder.appending(path: "paint.png"), options: .atomic)
+            }
             if let thumbnail, !thumbnail.isEmpty {
                 try thumbnail.write(to: folder.appending(path: "thumb.jpg"), options: .atomic)
             }
@@ -127,6 +137,31 @@ struct ArtworkMeta: Codable, Identifiable, Hashable, Sendable {
     }
 
     // MARK: Helpers
+
+    /// Paint colours ride at the end of `paint.png` (`colors`, length as UInt64 LE, magic), so paint
+    /// and colours are always written together in one atomic write. Image decoders ignore bytes
+    /// after the PNG end chunk, and files without the trailer simply have no colours.
+    private static let colorsMagic = Data("MNZCOLv1".utf8)
+
+    private static func join(_ paint: Data, _ colors: Data?) -> Data {
+        guard let colors else { return paint }
+        var out = paint
+        out.append(colors)
+        withUnsafeBytes(of: UInt64(colors.count).littleEndian) { out.append(contentsOf: $0) }
+        out.append(colorsMagic)
+        return out
+    }
+
+    private static func split(_ blob: Data) -> (paint: Data, colors: Data?) {
+        let tail = colorsMagic.count + 8
+        guard blob.count > tail, blob.suffix(colorsMagic.count) == colorsMagic else { return (blob, nil) }
+        let lengthBytes = blob.dropLast(colorsMagic.count).suffix(8)
+        let length = lengthBytes.enumerated().reduce(UInt64(0)) { $0 | UInt64($1.element) << (8 * UInt64($1.offset)) }
+        guard length <= UInt64(blob.count - tail) else { return (blob, nil) }
+        let paintEnd = blob.count - tail - Int(length)
+        let start = blob.startIndex
+        return (Data(blob[start..<(start + paintEnd)]), Data(blob[(start + paintEnd)..<(start + paintEnd + Int(length))]))
+    }
 
     private func writeMeta(_ meta: ArtworkMeta) throws {
         try Self.encoder.encode(meta).write(to: folder(meta.id).appending(path: "meta.json"), options: .atomic)

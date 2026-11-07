@@ -37,6 +37,22 @@ import PaintEngine
         #expect(store.paintData(meta.id) == Data([7]))
     }
 
+    @Test func paintColorsFollowThePaint() throws {
+        let store = ArtworkStore(directory: dir)
+        let meta = try store.create(template: Self.template, title: "A", options: TemplateOptions(), thumbnail: nil)
+        store.save(meta.id, paint: Data([7]), colors: Data([5, 5]), thumbnail: nil, progress: 0.1)
+        #expect(store.paintColorData(meta.id) == Data([5, 5]))
+        #expect(store.paintData(meta.id) == Data([7]))                // colours ride in paint.png
+        #expect(ArtworkStore(directory: dir).paintColorData(meta.id) == Data([5, 5]))
+        store.save(meta.id, paint: Data(), colors: nil, thumbnail: nil, progress: 0.1)   // failed export keeps both
+        #expect(store.paintColorData(meta.id) == Data([5, 5]))
+        store.save(meta.id, paint: Data([8]), colors: nil, thumbnail: nil, progress: 0.2)
+        #expect(store.paintColorData(meta.id) == nil)
+        store.save(meta.id, paint: Data([9]), colors: Data([6]), thumbnail: nil, progress: 0.3)
+        store.restart(meta.id, thumbnail: nil)
+        #expect(store.paintColorData(meta.id) == nil)
+    }
+
     @Test func brokenFoldersAreSkipped() throws {
         let store = ArtworkStore(directory: dir)
         let good = try store.create(template: Self.template, title: "Gut", options: TemplateOptions(), thumbnail: nil)

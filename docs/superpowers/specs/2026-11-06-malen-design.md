@@ -19,7 +19,11 @@ Referenz, bis der Swift-Port gleichwertig ist.
   also ohne Druckstufen) wird gemalt wie mit einem Pinsel. Kein Tippen-und-Füllen.
 - **Nicht übermalen (Ruben).** Farbe landet nur in Feldern mit der gewählten
   Nummer. Über den Rand und in fremde Felder malen geht nicht **(Claude: strenge
-  Auslegung, wie im Prototyp)**.
+  Auslegung, wie im Prototyp)**. *Nachtrag 2026-11-07 (Ruben):* Der Übermalschutz
+  ist im Spiel umschaltbar (Schild-Knopf oben, Standard an, gilt für alle Bilder).
+  An heißt: Ein Strich bleibt in dem einen Feld der gewählten Nummer, in dem er
+  ansetzt. Aus heißt: keine Felder, man malt frei über alles (nur fertige Felder
+  bleiben gesperrt); falsche Farbe zählt nicht und muss richtig übermalt werden.
 - **Dünner schwarzer Rand (Ruben)** um jedes Feld, immer über der Farbe.
 - **Farbanzahl beim Erstellen einstellbar, mit Live-Vorschau (Ruben).** Schieber
   bewegen → Vorschau der Vorlage aktualisiert sich währenddessen.

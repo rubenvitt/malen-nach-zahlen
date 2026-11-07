@@ -38,7 +38,8 @@ import UIKit
         let renderThumb = withThumbnail && thumbStale
         guard dirty || renderThumb else { return }
         let thumb = renderThumb ? session.renderFinished(showLines: true, maxSide: 900).jpegData(compressionQuality: 0.85) : nil
-        store.save(id, paint: session.paintLayerPNG(), thumbnail: thumb, progress: session.progress)
+        store.save(id, paint: session.paintLayerPNG(), colors: session.paintColorData(),
+                   thumbnail: thumb, progress: session.progress)
         dirty = false
         // The stub canvas renders an empty image; keep trying until a real thumbnail was written.
         if thumb != nil { thumbStale = false }

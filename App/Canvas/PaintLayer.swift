@@ -25,10 +25,10 @@ struct StrokeChange: Sendable {
 
 /// The paint bitmap and all progress bookkeeping, without any UIKit.
 ///
-/// Because paint may only land in fields of its own colour, every paint pixel is either empty or
-/// the colour of the template pixel under it. So the layer stores only *coverage* (alpha 0...255)
-/// per paint pixel; the colour comes from `template.colorOfPixel`, which therefore also is the
-/// (cached by construction) per-colour clipping mask.
+/// Per paint pixel the layer stores *coverage* (alpha 0...255) and the palette index of the paint
+/// (`paintColor`). With the overpaint protection on, a stroke stays inside the one field of its own
+/// colour it started in, so `paintColor` always equals the template colour there. With it off,
+/// paint goes anywhere except finished fields; a wrong colour does not count as painted.
 final class PaintLayer {
     /// Paint pixels per grid pixel (as in the web prototype).
     static let scale = 2
@@ -39,6 +39,8 @@ final class PaintLayer {
     let template: Template
     let width: Int, height: Int       // paint pixels
     private(set) var coverage: [UInt8]
+    /// Palette index of the paint per paint pixel; only meaningful where `coverage > 0`.
+    private(set) var paintColor: [UInt8]
 
     private(set) var paintedOfField: [Int32]
     private(set) var fieldComplete: [Bool]
@@ -58,26 +60,34 @@ final class PaintLayer {
     private var stroke: Snapshot?
     private var strokeColor = 0
     private var strokeRadius = 1.0
+    private var strokeProtected = true
+    private var strokeField: Int?     // protected: the one field this stroke may paint, fixed at its first hit
     private var lastPoint: CGPoint?
     private var preview: (rect: PixelRect, pixels: [UInt8])?
 
     var canUndo: Bool { !undoStack.isEmpty }
     var isStroking: Bool { stroke != nil }
 
-    init(template: Template, png: Data? = nil) {
+    /// `colors` is what `colorData()` returned earlier; without it all paint has its template colour.
+    init(template: Template, png: Data? = nil, colors: Data? = nil) {
         self.template = template
         width = template.width * Self.scale
         height = template.height * Self.scale
         coverage = [UInt8](repeating: 0, count: width * height)
+        paintColor = [UInt8](repeating: 0, count: width * height)
+        for y in 0..<height {
+            let grow = (y >> 1) * template.width
+            for x in 0..<width { paintColor[y * width + x] = template.colorOfPixel[grow + (x >> 1)] }
+        }
 
-        let fields = template.sizeOfField.count, colors = template.palette.count
+        let fields = template.sizeOfField.count, colorCount = template.palette.count
         paintedOfField = [Int32](repeating: 0, count: fields)
         fieldComplete = [Bool](repeating: false, count: fields)
         fieldBounds = Array(repeating: (Int.max, Int.max, 0, 0), count: fields)
-        paintedOfColor = [Int](repeating: 0, count: colors)
-        sizeOfColor = [Int](repeating: 0, count: colors)
-        completeFieldsOfColor = [Int](repeating: 0, count: colors)
-        fieldsOfColor = [Int](repeating: 0, count: colors)
+        paintedOfColor = [Int](repeating: 0, count: colorCount)
+        sizeOfColor = [Int](repeating: 0, count: colorCount)
+        completeFieldsOfColor = [Int](repeating: 0, count: colorCount)
+        fieldsOfColor = [Int](repeating: 0, count: colorCount)
 
         let w = template.width
         for i in 0..<(w * template.height) {
@@ -93,7 +103,10 @@ final class PaintLayer {
             totalSize += size
         }
 
-        if let png { load(png) }
+        if let png {
+            if let colors { loadColors(colors) }
+            load(png)
+        }
     }
 
     // MARK: Progress
@@ -121,14 +134,29 @@ final class PaintLayer {
 
     // MARK: Stroke API (points in paint pixels)
 
-    /// `radius` in paint pixels; it stays fixed for the stroke.
-    func beginStroke(color: Int, radius: Double) {
+    /// `radius` in paint pixels; it stays fixed for the stroke. `protected` keeps the paint out of
+    /// fields of other colours (the overpaint protection).
+    func beginStroke(color: Int, radius: Double, protected: Bool = true) {
         if stroke != nil { _ = endStroke() }
         stroke = Snapshot()
         strokeColor = color
         strokeRadius = max(0.75, radius)
+        strokeProtected = protected
+        strokeField = nil
         lastPoint = nil
     }
+
+    /// The open field of the stroke's colour under `p`, which a protected stroke then keeps to.
+    private func acceptingField(at p: CGPoint) -> Int? {
+        let x = Int(p.x.rounded(.down)), y = Int(p.y.rounded(.down))
+        guard x >= 0, y >= 0, x < width, y < height else { return nil }
+        let f = Int(template.fieldOfPixel[(y >> 1) * template.width + (x >> 1)])
+        guard !fieldComplete[f], Int(template.colorOfField[f]) == strokeColor else { return nil }
+        return f
+    }
+
+    /// Unprotected strokes paint everywhere; protected ones first need their field.
+    private var strokeCanPaint: Bool { !strokeProtected || strokeField != nil }
 
     /// Commits a segment chain through `points` and shows `predicted` as a temporary preview that
     /// never counts towards progress, undo or export.
@@ -137,12 +165,17 @@ final class PaintLayer {
         var change = StrokeChange(dirty: clearPreview())
         var touched = Set<Int32>()
         for p in points {
+            if !strokeCanPaint {
+                // Until the pencil reaches an open field of its colour, nothing happens.
+                guard let f = acceptingField(at: p) else { continue }
+                strokeField = f
+            }
             change.dirty = rasterize(from: lastPoint ?? p, to: p, commit: true, touched: &touched)
                 .map { $0.union(change.dirty) } ?? change.dirty
             lastPoint = p
         }
         completeFields(touched, into: &change)
-        if var a = lastPoint, !predicted.isEmpty {
+        if var a = lastPoint, strokeCanPaint, !predicted.isEmpty {
             // Back up the whole area first so the preview can be taken back byte-exactly.
             let bound = predicted.reduce(boundsOfSegment(a, a)) { $0.union(boundsOfSegment($1, $1)) }
             if !bound.isEmpty {
@@ -167,6 +200,7 @@ final class PaintLayer {
             change.committed = true
         }
         stroke = nil
+        strokeField = nil
         lastPoint = nil
         return change
     }
@@ -176,6 +210,7 @@ final class PaintLayer {
         let dirty = clearPreview()
         guard let s = stroke else { return dirty }
         stroke = nil
+        strokeField = nil
         lastPoint = nil
         return restore(s).union(dirty)
     }
@@ -209,10 +244,13 @@ final class PaintLayer {
                          y1: min(height, Int((max(a.y, b.y) + r).rounded(.up))))
     }
 
-    /// Anti-aliased round-capped segment, max-combined into coverage, clipped to `strokeColor`.
+    /// Anti-aliased round-capped segment, clipped to `strokeField` when protected and always to open
+    /// fields. Paint of the same colour is max-combined; another colour is painted over
+    /// where the new paint is solid enough.
     private func rasterize(from a: CGPoint, to b: CGPoint, commit: Bool, touched: inout Set<Int32>) -> PixelRect? {
         let box = boundsOfSegment(a, b)
-        guard !box.isEmpty, strokeColor < template.palette.count else { return nil }
+        guard !box.isEmpty, strokeColor < template.palette.count, strokeCanPaint else { return nil }
+        let protected = strokeProtected, only = Int32(strokeField ?? -1)
         let saved = commit ? saveTiles(box) : []
         let r = strokeRadius, ax = Double(a.x), ay = Double(a.y)
         let dx = Double(b.x) - ax, dy = Double(b.y) - ay
@@ -221,12 +259,13 @@ final class PaintLayer {
         var changed = false
         template.colorOfPixel.withUnsafeBufferPointer { colorOf in
         template.fieldOfPixel.withUnsafeBufferPointer { fieldOf in
+        paintColor.withUnsafeMutableBufferPointer { col in
         coverage.withUnsafeMutableBufferPointer { cov in
             for y in box.y0..<box.y1 {
                 let py = Double(y) + 0.5, grow = (y >> 1) * gw
                 for x in box.x0..<box.x1 {
                     let gi = grow + (x >> 1)
-                    guard colorOf[gi] == color else { continue }
+                    guard !protected || fieldOf[gi] == only else { continue }
                     let px = Double(x) + 0.5
                     var t = len2 > 0 ? ((px - ax) * dx + (py - ay) * dy) / len2 : 0
                     t = min(1, max(0, t))
@@ -234,24 +273,36 @@ final class PaintLayer {
                     let a = min(1, r + 0.5 - (ex * ex + ey * ey).squareRoot())
                     guard a > 0 else { continue }
                     let new = UInt8(a * 255)
-                    let i = y * w + x, old = cov[i]
-                    guard new > old else { continue }
-                    let f = Int(fieldOf[gi])
-                    if commit && fieldComplete[f] { continue }
+                    let i = y * w + x, old = cov[i], oldColor = col[i]
+                    if old == 0 || oldColor == color {
+                        guard new > old else { continue }
+                    } else {
+                        // A soft brush edge must not wash out solid paint of another colour.
+                        guard new >= Self.covered || new > old else { continue }
+                    }
+                    let field = Int(fieldOf[gi])
+                    if fieldComplete[field] { continue }
                     cov[i] = new
+                    col[i] = color
                     changed = true
-                    // A grid pixel counts as painted when the paint pixel at its centre is covered.
-                    if commit && x & 1 == 1 && y & 1 == 1 && old < Self.covered && new >= Self.covered {
-                        let field = Int32(f)
-                        if stroke?.fields[field] == nil {
-                            stroke?.fields[field] = (paintedOfField[f], fieldComplete[f])
+                    // A grid pixel counts as painted when the paint pixel at its centre is covered
+                    // with the right colour.
+                    if commit && x & 1 == 1 && y & 1 == 1 {
+                        let right = colorOf[gi]
+                        let was = old >= Self.covered && oldColor == right
+                        let now = new >= Self.covered && color == right
+                        if was != now {
+                            let field32 = Int32(field)
+                            if stroke?.fields[field32] == nil {
+                                stroke?.fields[field32] = (paintedOfField[field], fieldComplete[field])
+                            }
+                            setPainted(field, paintedOfField[field] + (now ? 1 : -1))
+                            if now { touched.insert(field32) }
                         }
-                        setPainted(f, paintedOfField[f] + 1)
-                        touched.insert(field)
                     }
                 }
             }
-        }}}
+        }}}}
         // Drop snapshots nobody needed, so strokes that change nothing leave no undo step.
         if !changed { saved.forEach { stroke?.tiles[$0] = nil } }
         return changed ? box : nil
@@ -274,12 +325,18 @@ final class PaintLayer {
     }
 
     private func fill(_ f: Int) -> PixelRect {
-        let b = fieldBounds[f], s = Self.scale, gw = template.width
+        let b = fieldBounds[f], s = Self.scale, gw = template.width, color = template.colorOfField[f]
         let rect = PixelRect(x0: b.x0 * s, y0: b.y0 * s, x1: b.x1 * s, y1: b.y1 * s)
         if stroke != nil { saveTiles(rect) }
         for gy in b.y0..<b.y1 {
             for gx in b.x0..<b.x1 where template.fieldOfPixel[gy * gw + gx] == Int32(f) {
-                for sy in 0..<s { for sx in 0..<s { coverage[(gy * s + sy) * width + gx * s + sx] = 255 } }
+                for sy in 0..<s {
+                    for sx in 0..<s {
+                        let i = (gy * s + sy) * width + gx * s + sx
+                        coverage[i] = 255
+                        paintColor[i] = color
+                    }
+                }
             }
         }
         return rect
@@ -308,18 +365,24 @@ final class PaintLayer {
         return added
     }
 
+    /// Coverage of `r`, followed by the paint colours of `r`.
     private func copy(_ r: PixelRect) -> [UInt8] {
-        var out = [UInt8](); out.reserveCapacity((r.x1 - r.x0) * (r.y1 - r.y0))
+        var out = [UInt8](); out.reserveCapacity((r.x1 - r.x0) * (r.y1 - r.y0) * 2)
         for y in r.y0..<r.y1 { out.append(contentsOf: coverage[(y * width + r.x0)..<(y * width + r.x1)]) }
+        for y in r.y0..<r.y1 { out.append(contentsOf: paintColor[(y * width + r.x0)..<(y * width + r.x1)]) }
         return out
     }
 
-    private func paste(_ pixels: [UInt8], into r: PixelRect) { Self.paste(pixels, into: r, of: &coverage, width: width) }
+    private func paste(_ pixels: [UInt8], into r: PixelRect) {
+        let half = pixels.count / 2
+        Self.paste(pixels[..<half], into: r, of: &coverage, width: width)
+        Self.paste(pixels[half...], into: r, of: &paintColor, width: width)
+    }
 
-    private static func paste(_ pixels: [UInt8], into r: PixelRect, of buffer: inout [UInt8], width: Int) {
+    private static func paste(_ pixels: ArraySlice<UInt8>, into r: PixelRect, of buffer: inout [UInt8], width: Int) {
         let rw = r.x1 - r.x0
         for y in r.y0..<r.y1 {
-            let src = (y - r.y0) * rw
+            let src = pixels.startIndex + (y - r.y0) * rw
             buffer.replaceSubrange((y * width + r.x0)..<(y * width + r.x1), with: pixels[src..<(src + rw)])
         }
     }
@@ -336,19 +399,18 @@ final class PaintLayer {
     /// Premultiplied RGBA image of a part of the paint layer.
     func makeImage(_ r: PixelRect) -> CGImage? {
         guard !r.isEmpty else { return nil }
-        let rw = r.x1 - r.x0, rh = r.y1 - r.y0, gw = template.width
+        let rw = r.x1 - r.x0, rh = r.y1 - r.y0
         let rgb = template.palette.map { [Int($0.r), Int($0.g), Int($0.b)] }
         var data = Data(count: rw * rh * 4)
         data.withUnsafeMutableBytes { (out: UnsafeMutableRawBufferPointer) in
             coverage.withUnsafeBufferPointer { cov in
-                template.colorOfPixel.withUnsafeBufferPointer { colorOf in
+                paintColor.withUnsafeBufferPointer { colorOf in
                     var o = 0
                     for y in r.y0..<r.y1 {
-                        let grow = (y >> 1) * gw
                         for x in r.x0..<r.x1 {
                             let a = Int(cov[y * width + x])
                             if a > 0 {
-                                let c = rgb[Int(colorOf[grow + (x >> 1)])]
+                                let c = rgb[Int(colorOf[y * width + x])]
                                 out[o] = UInt8((c[0] * a + 127) / 255)
                                 out[o + 1] = UInt8((c[1] * a + 127) / 255)
                                 out[o + 2] = UInt8((c[2] * a + 127) / 255)
@@ -371,7 +433,9 @@ final class PaintLayer {
 
     func pngData() -> Data {
         var clean = coverage
-        if let p = preview { Self.paste(p.pixels, into: p.rect, of: &clean, width: width) }   // never export predictions
+        if let p = preview {   // never export predictions
+            Self.paste(p.pixels[..<(p.pixels.count / 2)], into: p.rect, of: &clean, width: width)
+        }
         let data = Data(clean)
         let out = NSMutableData()
         guard let provider = CGDataProvider(data: data as CFData),
@@ -384,6 +448,34 @@ final class PaintLayer {
         CGImageDestinationAddImage(dest, image, nil)
         guard CGImageDestinationFinalize(dest) else { return Data() }
         return out as Data
+    }
+
+    /// The paint colours (zlib), or nil while every bit of paint has its template colour, which is
+    /// always the case with the overpaint protection on.
+    func colorData() -> Data? {
+        var cov = coverage, col = paintColor
+        if let p = preview {   // never export predictions
+            let half = p.pixels.count / 2
+            Self.paste(p.pixels[..<half], into: p.rect, of: &cov, width: width)
+            Self.paste(p.pixels[half...], into: p.rect, of: &col, width: width)
+        }
+        let gw = template.width
+        let foreign = (0..<height).contains { y in
+            let grow = (y >> 1) * gw
+            return (0..<width).contains { x in
+                let i = y * width + x
+                return cov[i] > 0 && col[i] != template.colorOfPixel[grow + (x >> 1)]
+            }
+        }
+        guard foreign else { return nil }
+        return try? (Data(col) as NSData).compressed(using: .zlib) as Data
+    }
+
+    /// Accepts only colours of exactly this layer's size and palette; anything else is ignored.
+    private func loadColors(_ data: Data) {
+        guard let raw = try? (data as NSData).decompressed(using: .zlib) as Data,
+              raw.count == width * height, raw.allSatisfy({ Int($0) < template.palette.count }) else { return }
+        paintColor = [UInt8](raw)
     }
 
     /// Accepts only a PNG of exactly this layer's size; anything else leaves the layer blank.
@@ -415,7 +507,9 @@ final class PaintLayer {
         let gw = template.width, s = Self.scale
         var counts = [Int32](repeating: 0, count: paintedOfField.count)
         for gy in 0..<template.height {
-            for gx in 0..<gw where coverage[(gy * s + 1) * width + gx * s + 1] >= Self.covered {
+            for gx in 0..<gw {
+                let i = (gy * s + 1) * width + gx * s + 1
+                guard coverage[i] >= Self.covered, paintColor[i] == template.colorOfPixel[gy * gw + gx] else { continue }
                 counts[Int(template.fieldOfPixel[gy * gw + gx])] += 1
             }
         }
