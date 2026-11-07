@@ -1,0 +1,39 @@
+{
+  "identifier" : "6F1E2D3C",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "6.99",
+      "familyShareable" : true,
+      "internalID" : "6755000001",
+      "localizations" : [
+        {
+          "description" : "Beliebig viele eigene Fotos ausmalen. Einmal zahlen, kein Abo.",
+          "displayName" : "Vollversion",
+          "locale" : "de"
+        },
+        {
+          "description" : "Paint as many of your own photos as you like. Pay once, no subscription.",
+          "displayName" : "Full Version",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "dev.rubeen.malen.unlock",
+      "referenceName" : "Vollversion",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_locale" : "de",
+    "_storefront" : "DEU"
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

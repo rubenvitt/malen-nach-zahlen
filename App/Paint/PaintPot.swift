@@ -54,7 +54,8 @@ struct PaintPot: View {
         .buttonStyle(.plain)
         .animation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.55), value: isSelected)
         .animation(reduceMotion ? nil : .spring(response: 0.45, dampingFraction: 0.5), value: isDone)
-        .accessibilityLabel("Farbe \(number), \(isDone ? "fertig" : progress.formatted(.percent.precision(.fractionLength(0)).locale(Locale(identifier: "de_DE"))) + " fertig")")
+        .accessibilityLabel(isDone ? "Farbe \(number), fertig"
+                                   : "Farbe \(number), \(progress.formatted(.percent.precision(.fractionLength(0)))) fertig")
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
         .accessibilityIdentifier("pot-\(number)")
     }
