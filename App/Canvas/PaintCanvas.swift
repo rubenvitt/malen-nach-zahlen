@@ -16,8 +16,12 @@ struct PaintCanvas: UIViewRepresentable {
 /// Layers, bottom to top: white + grey numbers (tiled, vector) → paint tiles → flash → borders
 /// (tiled, vector). Tiled layers redraw at the current zoom, so numbers and lines stay crisp.
 ///
-/// Input: the pencil paints, fingers pan (1) and pinch (2). Until a pencil was ever seen, a single
-/// finger paints and panning needs two fingers.
+/// Input: the pencil paints, fingers pan (1), pinch and rotate (2). Until a pencil was ever seen, a
+/// single finger paints and panning needs two fingers.
+///
+/// Rotation turns the whole scroll view like a sheet of paper. The scroll view is a square as large
+/// as this view's diagonal, centred on it, so it covers the screen at every angle; this view clips
+/// it. UIKit converts touches through the rotation, so strokes land where the pencil is.
 final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate, UIPencilInteractionDelegate {
     private(set) var session: PaintingSession
     private let scrollView = UIScrollView()
@@ -25,8 +29,15 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
     private var paintTiles: [CALayer] = []
     private var flashLayer = CALayer()
     private let strokeRecognizer = StrokeRecognizer()
+    private let rotationRecognizer = UIRotationGestureRecognizer()
     private var fitScale: CGFloat = 1
     private var isAtFit = true
+    /// Paper rotation in radians, in (-π, π].
+    private(set) var rotation: CGFloat = 0
+    /// Turning starts only after this much twist, so a plain pinch does not turn the paper.
+    private var rotationEngaged = false
+    private static let rotationThreshold: CGFloat = .pi / 24          // 7.5°
+    private static let rotationSnap: CGFloat = .pi / 30               // within 6° of 0/90/180/270
 
     private static let paintTile = 128               // paint pixels per tile layer
     private static let pencilSeenKey = "canvas.pencilSeen"
@@ -46,7 +57,12 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
         scrollView.showsVerticalScrollIndicator = false
         scrollView.contentInsetAdjustmentBehavior = .never
         scrollView.backgroundColor = .clear
+        clipsToBounds = true
         addSubview(scrollView)
+
+        rotationRecognizer.delegate = self
+        rotationRecognizer.addTarget(self, action: #selector(handleRotation(_:)))
+        addGestureRecognizer(rotationRecognizer)
 
         strokeRecognizer.delegate = self
         strokeRecognizer.cancelsTouchesInView = false
@@ -103,8 +119,13 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        scrollView.frame = bounds
         guard bounds.width > 0, bounds.height > 0 else { return }
+        // bounds/center, not frame: the scroll view may carry a rotation transform.
+        let side = hypot(bounds.width, bounds.height).rounded(.up)
+        if scrollView.bounds.size != CGSize(width: side, height: side) {
+            scrollView.bounds.size = CGSize(width: side, height: side)
+        }
+        scrollView.center = CGPoint(x: bounds.midX, y: bounds.midY)
         let w = CGFloat(session.template.width), h = CGFloat(session.template.height)
         fitScale = min(bounds.width / w, bounds.height / h) * 0.95
         scrollView.minimumZoomScale = fitScale * 0.5
@@ -119,25 +140,103 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
         if isAtFit { zoomToFit(animated: false) } else { centerContent() }
     }
 
+    /// Shows the whole picture, straightened.
     func zoomToFit(animated: Bool) {
+        setRotation(0, animated: animated)
         scrollView.setZoomScale(fitScale, animated: animated)
         isAtFit = true
         centerContent(scale: fitScale)
-        scrollView.setContentOffset(CGPoint(x: -scrollView.contentInset.left, y: -scrollView.contentInset.top),
-                                    animated: animated)
+        let size = scrollView.bounds.size
+        let w = CGFloat(session.template.width) * fitScale, h = CGFloat(session.template.height) * fitScale
+        scrollView.setContentOffset(CGPoint(x: (w - size.width) / 2, y: (h - size.height) / 2), animated: animated)
     }
 
+    /// Centres small content in the scroll view (and so on screen). The scroll view is larger than
+    /// the screen, so the insets also let every edge of the picture reach the inscribed circle of
+    /// the screen; that circle is visible at every rotation.
     private func centerContent(scale: CGFloat? = nil) {
         let size = scrollView.bounds.size, z = scale ?? scrollView.zoomScale
         let w = CGFloat(session.template.width) * z, h = CGFloat(session.template.height) * z
-        let x = max(0, (size.width - w) / 2), y = max(0, (size.height - h) / 2)
+        let reach = max(0, (size.width - min(bounds.width, bounds.height)) / 2)
+        let x = max(reach, (size.width - w) / 2), y = max(reach, (size.height - h) / 2)
         scrollView.contentInset = UIEdgeInsets(top: y, left: x, bottom: y, right: x)
     }
+
+    var contentViewForTesting: UIView { content }
+    var zoomScaleForTesting: CGFloat { scrollView.zoomScale }
 
     func viewForZooming(in scrollView: UIScrollView) -> UIView? { content }
     func scrollViewDidZoom(_ scrollView: UIScrollView) { centerContent() }
     func scrollViewWillBeginZooming(_ scrollView: UIScrollView, with view: UIView?) { isAtFit = false }
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) { isAtFit = false }
+
+    // MARK: Rotation
+
+    @objc private func handleRotation(_ g: UIRotationGestureRecognizer) {
+        switch g.state {
+        case .began, .changed:
+            if !rotationEngaged {
+                guard abs(g.rotation) > Self.rotationThreshold else { return }
+                rotationEngaged = true
+                g.rotation -= g.rotation > 0 ? Self.rotationThreshold : -Self.rotationThreshold
+            }
+            isAtFit = false
+            rotate(by: g.rotation, around: g.location(in: self))
+            g.rotation = 0
+        case .ended:
+            if rotationEngaged { snapRotation() }
+            rotationEngaged = false
+        case .cancelled, .failed:
+            // Cancelled when the pencil starts painting: the paper stays exactly where it is.
+            rotationEngaged = false
+        default:
+            break
+        }
+    }
+
+    /// Turns the paper by `delta` radians so that the picture point under `pivot` (in this view's
+    /// coordinates) stays under it, like a sheet turned under two fingers.
+    func rotate(by delta: CGFloat, around pivot: CGPoint) {
+        let anchor = convert(pivot, to: content)
+        setRotation(rotation + delta, animated: false)
+        let moved = content.convert(anchor, to: self)
+        // The same screen offset, expressed along the rotated scroll view's axes.
+        let a = scrollView.convert(pivot, from: self), b = scrollView.convert(moved, from: self)
+        scrollView.contentOffset.x += b.x - a.x
+        scrollView.contentOffset.y += b.y - a.y
+    }
+
+    private func setRotation(_ angle: CGFloat, animated: Bool) {
+        var a = angle.truncatingRemainder(dividingBy: 2 * .pi)
+        if a > .pi { a -= 2 * .pi } else if a <= -.pi { a += 2 * .pi }
+        rotation = a
+        let apply = { self.scrollView.transform = CGAffineTransform(rotationAngle: a) }
+        if animated && !UIAccessibility.isReduceMotionEnabled {
+            UIView.animate(withDuration: 0.25, delay: 0, options: [.beginFromCurrentState, .curveEaseOut, .allowUserInteraction], animations: apply)
+        } else {
+            apply()
+        }
+    }
+
+    /// Stops a running snap (or "Ganzes Bild") where it is on screen, so the paper does not move
+    /// under a pencil that just touched down.
+    private func freezeRunningAnimation() {
+        let layer = scrollView.layer
+        guard layer.animationKeys()?.isEmpty == false, let shown = layer.presentation() else { return }
+        let angle = atan2(shown.transform.m12, shown.transform.m11)
+        let origin = shown.bounds.origin
+        layer.removeAllAnimations()
+        setRotation(angle, animated: false)
+        scrollView.contentOffset = origin
+    }
+
+    /// Close to straight (or a quarter turn), the paper settles exactly there.
+    private func snapRotation() {
+        let quarter = CGFloat.pi / 2
+        let target = (rotation / quarter).rounded() * quarter
+        guard rotation != target, abs(rotation - target) < Self.rotationSnap else { return }
+        setRotation(target, animated: true)
+    }
 
     // MARK: Input
 
@@ -147,6 +246,7 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
         scrollView.panGestureRecognizer.allowedTouchTypes = [finger]
         scrollView.pinchGestureRecognizer?.allowedTouchTypes = [finger]
         scrollView.panGestureRecognizer.minimumNumberOfTouches = pencilSeen ? 1 : 2
+        rotationRecognizer.allowedTouchTypes = [finger]
         strokeRecognizer.allowedTouchTypes = pencilSeen ? [pencil] : [pencil, finger]
     }
 
@@ -160,6 +260,8 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
             // A resting palm must not pan or zoom while the pencil paints.
             scrollView.panGestureRecognizer.isEnabled = false
             scrollView.pinchGestureRecognizer?.isEnabled = false
+            rotationRecognizer.isEnabled = false
+            freezeRunningAnimation()
         }
         let radius = Double(session.brush.diameter / 2 / scrollView.zoomScale) * Double(PaintLayer.scale)
         session.beginStroke(radius: radius)
@@ -190,6 +292,7 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
     private func enableScrolling() {
         scrollView.panGestureRecognizer.isEnabled = true
         scrollView.pinchGestureRecognizer?.isEnabled = true
+        rotationRecognizer.isEnabled = true
     }
 
     private func paintPoint(_ touch: UITouch) -> CGPoint {
