@@ -88,12 +88,7 @@ struct ArtworkMeta: Codable, Identifiable, Hashable, Sendable {
         guard var meta = artworks.first(where: { $0.id == id }) else { return }
         let folder = folder(id)
         do {
-            if !paint.isEmpty {
-                let colorsURL = folder.appending(path: "paint-colors.bin")
-                if let colors { try colors.write(to: colorsURL, options: .atomic) }
-                else { try? FileManager.default.removeItem(at: colorsURL) }
-                try paint.write(to: folder.appending(path: "paint.png"), options: .atomic)
-            }
+            if !paint.isEmpty { try commitPaint(paint, colors: colors, in: folder) }
             if let thumbnail, !thumbnail.isEmpty {
                 try thumbnail.write(to: folder.appending(path: "thumb.jpg"), options: .atomic)
             }
@@ -140,6 +135,29 @@ struct ArtworkMeta: Codable, Identifiable, Hashable, Sendable {
     }
 
     // MARK: Helpers
+
+    /// Writes paint and colours as a pair: both are staged first, so a failed write leaves the old
+    /// pair untouched, and the final renames replace each file atomically.
+    private func commitPaint(_ paint: Data, colors: Data?, in folder: URL) throws {
+        let fm = FileManager.default
+        let paintURL = folder.appending(path: "paint.png"), colorsURL = folder.appending(path: "paint-colors.bin")
+        let paintNew = folder.appending(path: "paint.png.new"), colorsNew = folder.appending(path: "paint-colors.bin.new")
+        do {
+            try paint.write(to: paintNew)
+            if let colors { try colors.write(to: colorsNew) }
+        } catch {
+            try? fm.removeItem(at: paintNew)
+            try? fm.removeItem(at: colorsNew)
+            throw error
+        }
+        if colors == nil { try? fm.removeItem(at: colorsURL) }
+        try Self.move(paintNew, over: paintURL)
+        if colors != nil { try Self.move(colorsNew, over: colorsURL) }
+    }
+
+    private static func move(_ source: URL, over destination: URL) throws {
+        guard rename(source.path, destination.path) == 0 else { throw CocoaError(.fileWriteUnknown) }
+    }
 
     private func writeMeta(_ meta: ArtworkMeta) throws {
         try Self.encoder.encode(meta).write(to: folder(meta.id).appending(path: "meta.json"), options: .atomic)
