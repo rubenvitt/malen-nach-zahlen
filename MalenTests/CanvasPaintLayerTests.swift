@@ -62,28 +62,6 @@ private func strokeAcross(_ l: PaintLayer, color: Int, y: CGFloat, radius: Doubl
     #expect(!l.endStroke().committed)
 }
 
-@Test func openFieldsImageShowsOnlyOpenFieldsOfColour() throws {
-    let l = PaintLayer(template: canvasTestTemplate())
-    func alpha(_ img: CGImage, _ x: Int, _ y: Int) -> UInt8 {
-        let data = img.dataProvider!.data! as Data
-        return data[y * img.bytesPerRow + x * 4 + 3]
-    }
-    var img = try #require(l.openFieldsImage(color: 0))
-    #expect(img.width == 8 && img.height == 4)
-    #expect(alpha(img, 0, 0) == 255)   // field 0
-    #expect(alpha(img, 5, 1) == 255)   // field 2
-    #expect(alpha(img, 7, 0) == 0)     // colour 1
-    // Complete field 2 only (rows 1–2 of columns 5–6).
-    l.beginStroke(color: 0, radius: 1.5)
-    _ = l.continueStroke([CGPoint(x: 11, y: 3), CGPoint(x: 13, y: 5)])
-    _ = l.endStroke()
-    #expect(l.fieldComplete[2])
-    img = try #require(l.openFieldsImage(color: 0))
-    #expect(alpha(img, 5, 1) == 0)
-    #expect(alpha(img, 0, 0) == 255)
-    #expect(l.openFieldsImage(color: 9) == nil)
-}
-
 @Test func strokeReachesSameColouredFieldInsideForeignField() {
     let l = PaintLayer(template: canvasTestTemplate())
     _ = strokeAcross(l, color: 0, y: 4, radius: 3)    // rows 1–2 cover field 2

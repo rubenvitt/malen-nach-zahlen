@@ -52,10 +52,6 @@ enum BrushSize: CaseIterable, Codable {
         onStrokeEnded?()
     }
 
-    /// Lets the still open fields of `selectedColor` pulse briefly so small fields are easy to
-    /// find. Call it after the user picks a colour. With Reduce Motion it is one soft pulse.
-    func flashOpenFields() { canvasView?.flashOpenFields(color: selectedColor) }
-
     /// Zooms out to show the whole picture ("Ganzes Bild").
     func showWholePicture() { canvasView?.zoomToFit(animated: true) }
 
