@@ -50,6 +50,55 @@ final class SmokeTests: XCTestCase {
         XCTAssertTrue(app.buttons["artworkCard"].waitForExistence(timeout: 10))
     }
 
+    /// App Store screenshots (13" iPad, landscape). Skipped in normal runs; the Screenshots workflow sets
+    /// SCREENSHOTS=1 and one SCREENSHOT_LANGUAGE per run. Finds everything by identifier, so it works in every
+    /// language. `-uiTestPrefill` paints the top half of the fox, so the canvas and gallery show work in progress.
+    @MainActor func testAppStoreScreenshots() throws {
+        let environment = ProcessInfo.processInfo.environment
+        try XCTSkipUnless(environment["SCREENSHOTS"] == "1", "only for the Screenshots workflow")
+        continueAfterFailure = false
+        let language = environment["SCREENSHOT_LANGUAGE"] ?? "de"
+        let locales = ["de": "de_DE", "en": "en_US", "fr": "fr_FR", "es": "es_ES", "it": "it_IT",
+                       "ja": "ja_JP", "ko": "ko_KR", "nl": "nl_NL", "pt-BR": "pt_BR"]
+        XCUIDevice.shared.orientation = .landscapeLeft
+        let app = XCUIApplication()
+        app.launchArguments = ["-uiTestStore", "-uiTestPrefill",
+                               "-AppleLanguages", "(\(language))", "-AppleLocale", locales[language] ?? "de_DE"]
+        app.launch()
+
+        let motif = app.buttons["motif-fox"]
+        XCTAssertTrue(motif.waitForExistence(timeout: 10))
+        motif.tap()
+
+        let start = app.buttons["startPainting"]
+        XCTAssertTrue(start.waitForExistence(timeout: 10))
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == true"), object: start)
+        XCTAssertEqual(XCTWaiter().wait(for: [enabled], timeout: 60), .completed)
+        sleep(2)   // full-resolution preview replaces the quick one
+        screenshot("2-Vorlage")
+
+        app.segmentedControls.firstMatch.buttons.element(boundBy: 1).tap()
+        sleep(2)
+        screenshot("3-Vorschau")
+
+        start.tap()
+        XCTAssertTrue(app.buttons["backToGallery"].waitForExistence(timeout: 120))
+        sleep(2)
+        screenshot("1-Malen")
+
+        app.buttons["backToGallery"].tap()
+        XCTAssertTrue(app.buttons["artworkCard"].waitForExistence(timeout: 10))
+        sleep(2)
+        screenshot("4-Galerie")
+    }
+
+    @MainActor private func screenshot(_ name: String) {
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = name
+        shot.lifetime = .keepAlways
+        add(shot)
+    }
+
     @MainActor private func attach(_ app: XCUIApplication, _ name: String) {
         let shot = XCTAttachment(screenshot: app.screenshot())
         shot.name = name

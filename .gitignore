@@ -17,6 +17,7 @@ xcuserdata/
 *.ipa
 *.xcarchive
 fastlane/report.xml
+fastlane/screenshots/
 
 # Agent-Arbeitsverzeichnis
 .superpowers/

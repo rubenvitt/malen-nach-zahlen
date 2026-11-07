@@ -1,0 +1,77 @@
+name: Screenshots
+
+# App Store screenshots in the size App Store Connect asks for (13" iPad, landscape), one set per app language.
+# Start by hand for a look; the App Store workflow calls it and uploads the PNGs.
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+
+jobs:
+  screenshots:
+    runs-on: macos-26
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: iPad-13
+            pattern: '^iPad Pro 13-inch'
+    name: screenshots (${{ matrix.name }})
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/xcodegen
+      - name: Boot simulator with a clean status bar
+        env:
+          PATTERN: ${{ matrix.pattern }}
+        run: |
+          UDID=$(xcrun simctl list devices available -j | jq -r --arg p "$PATTERN" '[.devices[][] | select(.name | test($p))] | last | .udid')
+          if [ -z "$UDID" ] || [ "$UDID" = null ]; then
+            echo "No simulator matches $PATTERN" >&2
+            xcrun simctl list devices available >&2
+            exit 1
+          fi
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID"
+          xcrun simctl status_bar "$UDID" override --time "9:41" --dataNetwork wifi --wifiMode active --wifiBars 3 \
+            --cellularMode active --cellularBars 4 --batteryState charged --batteryLevel 100
+      - name: Build for testing
+        run: xcodebuild build-for-testing -scheme Malen -destination "id=$UDID" -derivedDataPath "$RUNNER_TEMP/dd" CODE_SIGNING_ALLOWED=NO
+      - name: Take screenshots
+        env:
+          TEST_RUNNER_SCREENSHOTS: "1"
+          LANGUAGES: de en fr es it ja ko nl pt-BR # keep in step with the String Catalogs and the App Store workflow
+        run: |
+          for language in $LANGUAGES; do
+            TEST_RUNNER_SCREENSHOT_LANGUAGE="$language" xcodebuild test-without-building -scheme Malen -destination "id=$UDID" \
+              -derivedDataPath "$RUNNER_TEMP/dd" -only-testing:MalenUITests/SmokeTests/testAppStoreScreenshots \
+              -resultBundlePath "$RUNNER_TEMP/screenshots-$language.xcresult" CODE_SIGNING_ALLOWED=NO
+          done
+      - name: Export PNGs
+        env:
+          LANGUAGES: de en fr es it ja ko nl pt-BR
+        run: |
+          for language in $LANGUAGES; do
+            OUT="$RUNNER_TEMP/screenshots/$language"
+            xcrun xcresulttool export attachments --path "$RUNNER_TEMP/screenshots-$language.xcresult" --output-path "$OUT"
+            (
+              cd "$OUT"
+              jq -r '.[].attachments[] | [.exportedFileName, .suggestedHumanReadableName] | @tsv' manifest.json |
+                while IFS=$'\t' read -r file name; do mv "$file" "$name"; done
+              rm manifest.json
+            )
+          done
+          ls -laR "$RUNNER_TEMP/screenshots"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: screenshots-${{ matrix.name }}
+          path: ${{ runner.temp }}/screenshots/*/*.png
+          if-no-files-found: error
