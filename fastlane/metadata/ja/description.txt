@@ -24,3 +24,6 @@ Apple Pencilでひと筆ずつ塗っていきます。はみ出し防止がオ�
 付属の絵と最初の1枚の写真は無料です。さらに写真を使うには、買い切りでフル版をロック解除。サブスクなし、ファミリー共有に対応。
 
 広告なし、アカウントなし、データ収集なし。写真がiPadの外に出ることはありません。
+
+利用規約（EULA）：https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
+プライバシーポリシー：https://github.com/rubenvitt/malen-nach-zahlen/blob/main/PRIVACY.md

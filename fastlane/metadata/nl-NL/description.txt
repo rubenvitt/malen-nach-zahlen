@@ -24,3 +24,6 @@ GRATIS PROBEREN, ÉÉN KEER KOPEN
 De motieven en je eerste eigen foto zijn gratis. Voor meer foto's ontgrendel je de volledige versie met een eenmalige aankoop: geen abonnement, te delen met je gezin.
 
 Geen advertenties, geen account, geen dataverzameling. Je foto's verlaten je iPad nooit.
+
+Gebruiksvoorwaarden (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
+Privacybeleid: https://github.com/rubenvitt/malen-nach-zahlen/blob/main/PRIVACY.md

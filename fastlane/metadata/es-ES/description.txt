@@ -24,3 +24,6 @@ PRUEBA GRATIS, COMPRA UNA VEZ
 Los motivos y tu primera foto propia son gratis. Para más fotos, desbloquea la versión completa con una compra única: sin suscripción, para compartir con tu familia.
 
 Sin anuncios, sin cuenta, sin recopilación de datos. Tus fotos nunca salen de tu iPad.
+
+Condiciones de uso (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
+Política de privacidad: https://github.com/rubenvitt/malen-nach-zahlen/blob/main/PRIVACY.md

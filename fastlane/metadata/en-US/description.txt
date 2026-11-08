@@ -24,3 +24,6 @@ TRY FOR FREE, BUY ONCE
 The motifs and your first own photo are free. For more photos, unlock the full version with a one-time purchase: no subscription, shareable with your family.
 
 No ads, no account, no data collection. Your photos never leave your iPad.
+
+Terms of Use (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
+Privacy Policy: https://github.com/rubenvitt/malen-nach-zahlen/blob/main/PRIVACY.md
