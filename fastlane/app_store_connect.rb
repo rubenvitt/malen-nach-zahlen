@@ -45,8 +45,9 @@ module AppStoreConnect
       request(:patch, path, body: body)
     end
 
+    # Already gone counts as deleted.
     def delete(path)
-      request(:delete, path)
+      request(:delete, path, allow_missing: true)
     end
 
     # Walks `links.next` until the block finds something; returns it or nil.
