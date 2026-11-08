@@ -110,8 +110,8 @@ struct FullVersionSheet: View {
             HStack(spacing: 10) {
                 if busy || fullVersion.isLoadingProduct {
                     ProgressView().tint(.white)
-                } else if let product = fullVersion.product {
-                    Text("Freischalten für \(product.displayPrice)")
+                } else if let price = displayPrice {
+                    Text("Freischalten für \(price)")
                 } else {
                     Text("Erneut versuchen")
                 }
@@ -127,9 +127,19 @@ struct FullVersionSheet: View {
         .accessibilityIdentifier("buyFullVersion")
     }
 
+    private var displayPrice: String? {
+        if let product = fullVersion.product { return product.displayPrice }
+        #if DEBUG
+        // App Review screenshot: the simulator in CI has no StoreKit products (`-uiTestPrice "$6.99"`).
+        return UserDefaults.standard.string(forKey: "uiTestPrice")
+        #else
+        return nil
+        #endif
+    }
+
     private func loadProduct() async {
         await fullVersion.loadProduct()
-        note = fullVersion.product == nil ? .storeUnavailable : nil
+        note = displayPrice == nil ? .storeUnavailable : nil
     }
 
     private func buy() {

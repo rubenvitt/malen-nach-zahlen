@@ -62,8 +62,8 @@ final class SmokeTests: XCTestCase {
                        "ja": "ja_JP", "ko": "ko_KR", "nl": "nl_NL", "pt-BR": "pt_BR"]
         XCUIDevice.shared.orientation = .landscapeLeft
         let app = XCUIApplication()
-        app.launchArguments = ["-uiTestStore", "-uiTestPrefill",
-                               "-AppleLanguages", "(\(language))", "-AppleLocale", locales[language] ?? "de_DE"]
+        app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", locales[language] ?? "de_DE",
+                               "-uiTestStore", "-uiTestPrefill"]
         app.launch()
 
         let motif = app.buttons["motif-fox"]
@@ -90,6 +90,26 @@ final class SmokeTests: XCTestCase {
         XCTAssertTrue(app.buttons["artworkCard"].waitForExistence(timeout: 10))
         sleep(2)
         screenshot("4-Galerie")
+    }
+
+    /// The purchase sheet for the in-app purchase's App Review screenshot (English, one per purchase).
+    /// The CI simulator has no StoreKit products, so `-uiTestPrice` stands in for the price.
+    @MainActor func testInAppPurchaseReviewScreenshot() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["SCREENSHOTS"] == "1", "only for the Screenshots workflow")
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .landscapeLeft
+        let app = XCUIApplication()
+        // Key-value pairs first: a lone flag in front could swallow the next key as its value.
+        app.launchArguments = ["-uiTestPrice", "$6.99", "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
+                               "-uiTestStore", "-uiTestShowFullVersion"]
+        app.launch()
+
+        let buy = app.buttons["buyFullVersion"]
+        XCTAssertTrue(buy.waitForExistence(timeout: 20))
+        let priced = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS '6.99'"), object: buy)
+        XCTAssertEqual(XCTWaiter().wait(for: [priced], timeout: 30), .completed)
+        sleep(1)
+        screenshot("Kaufseite")
     }
 
     @MainActor private func screenshot(_ name: String) {

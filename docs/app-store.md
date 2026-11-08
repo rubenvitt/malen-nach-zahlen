@@ -25,25 +25,31 @@ Gratis laden, einmal freischalten, keine Werbung, kein Abo (Begründung in der [
 | Notiz an das Prüfteam (inkl. Weg zur Kaufseite) | `fastlane/metadata/review_information/notes.txt` |
 | Screenshots 13″ iPad quer, je Sprache | Workflow **Screenshots**, läuft auch im Workflow **App Store** mit |
 | Build | Workflow **TestFlight** bei jedem Push auf `main` |
-| Texte und Screenshots hochladen, optional einreichen | Workflow **App Store** (von Hand starten, nur auf `main`) |
+| Preis, Länder, In-App-Kauf, Altersfreigabe, Texte und Screenshots, optional einreichen | Workflow **App Store** (von Hand starten, nur auf `main`) |
 | Freigegebene Version veröffentlichen | Workflow **Release** (von Hand starten, nur auf `main`) |
 
-## In App Store Connect (einmalig, nur im Browser)
+## Was der Workflow „App Store“ einrichtet
+
+Vor dem Hochladen der Texte läuft `fastlane store_setup` (`fastlane/app_store_connect.rb`, über die App Store Connect API). Es legt nur an, was fehlt; Preise und Länder, die schon gesetzt sind, bleiben unverändert. Ändern geht danach in App Store Connect.
+
+| Was | Wert |
+|---|---|
+| Preis der App | kostenlos (Deutschland als Basis) |
+| Verfügbarkeit der App | alle Länder außer China (Festland braucht eine ICP-Nummer), neue Länder automatisch |
+| In-App-Kauf | `dev.rubeen.malen.unlock`, nicht verbrauchbar, Referenzname „Vollversion“, Familienfreigabe an |
+| Texte des Kaufs | neun Sprachen aus `fastlane/in_app_purchase.json` (Name ≤ 30, Beschreibung ≤ 45 Zeichen) |
+| Preis des Kaufs | 6,99 € (`FULL_VERSION_PRICE` im Fastfile), andere Länder rechnet Apple um |
+| Verfügbarkeit des Kaufs | wie die App |
+| Prüfnotiz und Screenshot des Kaufs | `fastlane/in_app_purchase_review_note.txt`; Screenshot der Kaufseite aus dem Workflow **Screenshots** (`testInAppPurchaseReviewScreenshot`, englisch, Preis im Simulator per `-uiTestPrice` gesetzt) |
+| Altersfreigabe | `fastlane/age_rating.json`, überall „Keine“ bzw. „Nein“ → 4+ (lädt `deliver` mit den Texten hoch) |
 
 Vertrag für bezahlte Apps, Bankverbindung, Steuerformulare und EU-Händlerstatus gelten fürs ganze Konto und sind durch Griffel Sudoku schon erledigt.
 
-1. **In-App-Kauf anlegen:** *Monetarisierung → In-App-Käufe → +*, Typ **Nicht verbrauchbar**, Referenzname „Vollversion“, Produkt-ID **`dev.rubeen.malen.unlock`** (muss exakt so heißen). Preis: Vorschlag **6,99 €** (Deutschland als Basis). **Familienfreigabe** einschalten. Lokalisierung mindestens Deutsch und Englisch:
-   - de: „Vollversion“ – „Beliebig viele eigene Fotos ausmalen. Einmal zahlen, kein Abo.“
-   - en: „Full Version“ – „Paint as many of your own photos as you like. Pay once, no subscription.“
-   - Für die Prüfung einen Screenshot der Kaufseite hochladen (aus TestFlight, Kaufseite erscheint beim zweiten eigenen Foto).
-2. **App-Datenschutz:** „Keine Daten erhoben“ auswählen und veröffentlichen. Den Kauf wickelt Apple ab; das zählt nicht als Datenerhebung der App.
-3. **Altersfreigabe:** Fragebogen überall mit „Nein“ bzw. „Keine“ → 4+.
-4. **Preis der App:** kostenlos. Länder wählen.
-5. **Name prüfen:** In App Store Connect heißt die App „Griffel Malen nach Zahlen“ (`name.txt` muss dazu passen, sonst benennt der Upload sie um). Auf dem Homescreen heißt sie „Malen“ bzw. übersetzt.
-6. **Erstes Einreichen von Hand**, weil der erste In-App-Kauf mit einer App-Version zusammen geprüft werden muss:
-   1. Workflow **App Store** ohne `submit` starten: lädt Texte, Prüfnotiz und Screenshots hoch.
-   2. In App Store Connect die Version 1.0 öffnen, Build wählen, unter *In-App-Käufe und Abonnements* die Vollversion hinzufügen, **Zur Prüfung einreichen**.
-   3. Nach der Freigabe **Release** starten (oder in App Store Connect veröffentlichen).
+## Was nur im Browser geht
+
+1. **App-Datenschutz:** „Keine Daten erhoben“ auswählen und veröffentlichen. Den Kauf wickelt Apple ab; das zählt nicht als Datenerhebung der App. Dafür gibt es keine API.
+2. **Erstes Einreichen**, weil der erste In-App-Kauf zusammen mit einer App-Version geprüft werden muss und das nur auf der Versionsseite geht: Version 1.0 öffnen, Build wählen, unter *In-App-Käufe und Abonnements* die Vollversion hinzufügen, **Zur Prüfung einreichen**.
+3. Nach der Freigabe Workflow **Release** starten (oder in App Store Connect veröffentlichen).
 
 Ab dem zweiten Update geht das Einreichen per Workflow (`submit` = `einreichen`).
 
