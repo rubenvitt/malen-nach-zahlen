@@ -138,6 +138,10 @@ struct FullVersionSheet: View {
     }
 
     private func loadProduct() async {
+        #if DEBUG
+        // The review screenshot uses a stand-in price; a StoreKit request without products can spin for minutes.
+        if UserDefaults.standard.string(forKey: "uiTestPrice") != nil { return }
+        #endif
         await fullVersion.loadProduct()
         note = displayPrice == nil ? .storeUnavailable : nil
     }
