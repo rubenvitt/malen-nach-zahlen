@@ -1,6 +1,10 @@
+require_relative "app_store_connect"
+
 default_platform(:ios)
 
 APP_IDENTIFIER = "dev.rubeen.malen"
+FULL_VERSION_ID = "dev.rubeen.malen.unlock"
+FULL_VERSION_PRICE = "6.99" # euro, Germany as base territory; only used when the purchase has no price yet
 
 platform :ios do
   private_lane :asc_api_key do
@@ -25,6 +29,28 @@ platform :ios do
       skip_waiting_for_build_processing: !distribute
     }.compact
     pilot(options)
+  end
+
+  desc "Free app, availability and the full-version in-app purchase (texts, price, review screenshot)"
+  desc "Creates only what is missing; existing prices and territories stay as they are."
+  desc "Pass review_screenshot:PATH for the purchase sheet screenshot App Review needs."
+  lane :store_setup do |options|
+    key = asc_api_key
+    token = Spaceship::ConnectAPI::Token.create(**key)
+    client = AppStoreConnect::Client.new(lambda {
+      token.refresh! if token.expired?
+      token.text
+    })
+    setup = AppStoreConnect::Setup.new(client, log: ->(message) { UI.message(message) })
+    app = setup.app_id(APP_IDENTIFIER)
+    setup.ensure_free(app)
+    setup.ensure_app_availability(app)
+    iap = setup.ensure_in_app_purchase(app, product_id: FULL_VERSION_ID, name: "Vollversion",
+                                            review_note: File.read("in_app_purchase_review_note.txt").strip)
+    setup.ensure_localizations(iap, JSON.parse(File.read("in_app_purchase.json")))
+    setup.ensure_iap_price(iap, FULL_VERSION_PRICE)
+    setup.ensure_iap_availability(iap)
+    setup.ensure_review_screenshot(iap, options[:review_screenshot])
   end
 
   desc "Upload texts, review notes and (if present) fastlane/screenshots; no binary, no submission"
@@ -74,6 +100,7 @@ def listing_options
     skip_screenshots: !screenshots,
     overwrite_screenshots: true,
     app_review_information: review_information,
+    app_rating_config_path: "./fastlane/age_rating.json",
     force: true, # no HTML preview to confirm on a headless run
     precheck_include_in_app_purchases: false
   }.compact

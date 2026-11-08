@@ -6,6 +6,7 @@ struct MalenApp: App {
     @State private var store: ArtworkStore
     @State private var fullVersion: FullVersion
     @State private var path: [Route] = []
+    @State private var showsFullVersionForReview = false   // App Review screenshot of the purchase sheet (Debug)
 
     init() {
         #if DEBUG // UI tests run in Debug; the shipped app never reads these launch arguments
@@ -13,6 +14,7 @@ struct MalenApp: App {
             let store = ArtworkStore(directory: FileManager.default.temporaryDirectory.appending(path: UUID().uuidString))
             let args = ProcessInfo.processInfo.arguments
             if args.contains("-uiTestFixedTemplate") { Self.injectFixture(into: store) }
+            _showsFullVersionForReview = State(initialValue: args.contains("-uiTestShowFullVersion"))
             _store = State(initialValue: store)
             // Fresh counter per run, so one UI test's photo never uses up the next test's free photo.
             _fullVersion = State(initialValue: FullVersion(defaults: UserDefaults(suiteName: UUID().uuidString) ?? .standard))
@@ -41,6 +43,7 @@ struct MalenApp: App {
                         }
                     }
             }
+            .sheet(isPresented: $showsFullVersionForReview) { FullVersionSheet {} }
             .environment(store)
             .environment(fullVersion)
             .task { fullVersion.start() }

@@ -10,12 +10,12 @@
       "internalID" : "6755000001",
       "localizations" : [
         {
-          "description" : "Beliebig viele eigene Fotos ausmalen. Einmal zahlen, kein Abo.",
+          "description" : "Alle eigenen Fotos ausmalen, ohne Abo",
           "displayName" : "Vollversion",
           "locale" : "de"
         },
         {
-          "description" : "Paint as many of your own photos as you like. Pay once, no subscription.",
+          "description" : "Paint all your own photos, no subscription",
           "displayName" : "Full Version",
           "locale" : "en_US"
         }
