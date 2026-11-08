@@ -19,7 +19,8 @@ module AppStoreConnect
 
   class Client
     BASE = "https://api.appstoreconnect.apple.com".freeze
-    METHODS = { get: Net::HTTP::Get, post: Net::HTTP::Post, patch: Net::HTTP::Patch, put: Net::HTTP::Put }.freeze
+    METHODS = { get: Net::HTTP::Get, post: Net::HTTP::Post, patch: Net::HTTP::Patch, put: Net::HTTP::Put,
+                delete: Net::HTTP::Delete }.freeze
 
     # `token` returns a current bearer token for every request.
     def initialize(token, base: BASE)
@@ -42,6 +43,10 @@ module AppStoreConnect
 
     def patch(path, body)
       request(:patch, path, body: body)
+    end
+
+    def delete(path)
+      request(:delete, path)
     end
 
     # Walks `links.next` until the block finds something; returns it or nil.
@@ -96,6 +101,7 @@ module AppStoreConnect
   class Setup
     # China mainland needs an ICP filing number, which this app does not have.
     EXCLUDED_TERRITORIES = ["CHN"].freeze
+    INCOMPLETE_UPLOADS = ["AWAITING_UPLOAD", "FAILED"].freeze
 
     def initialize(client, log: ->(message) { puts(message) })
       @api = client
@@ -253,9 +259,18 @@ module AppStoreConnect
     end
 
     def ensure_review_screenshot(iap, path)
-      existing = @api.get_if_exists("/v2/inAppPurchases/#{iap}/appStoreReviewScreenshot")
-      return @log.call("Review screenshot: already uploaded, unchanged") if existing && existing["data"]
+      current = @api.get_if_exists("/v2/inAppPurchases/#{iap}/appStoreReviewScreenshot")&.dig("data")
+      state = current&.dig("attributes", "assetDeliveryState", "state")
+      unfinished = INCOMPLETE_UPLOADS.include?(state)
+      return @log.call("Review screenshot: already uploaded, unchanged") if current && !unfinished
       return @log.call("Review screenshot: none given, skipped") if path.to_s.empty? || !File.exist?(path)
+
+      # A run that died between reserving and committing leaves a reservation behind; its upload URLs may have
+      # expired, so start over instead of reusing it.
+      if unfinished
+        @api.delete("/v1/inAppPurchaseAppStoreReviewScreenshots/#{current['id']}")
+        @log.call("Review screenshot: removed unfinished upload (#{state})")
+      end
 
       bytes = File.binread(path)
       reservation = @api.post("/v1/inAppPurchaseAppStoreReviewScreenshots", {
