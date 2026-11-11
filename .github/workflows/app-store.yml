@@ -1,6 +1,6 @@
 name: App Store
 
-# Sets up price, availability and the in-app purchase, then uploads texts, age rating, review notes and
+# Sets up price (free) and availability, then uploads texts, age rating, review notes and
 # fresh screenshots to App Store Connect.
 # With "submit" it also attaches a TestFlight build and submits version 1.x for review;
 # an approved version still waits for a manual release in App Store Connect.
@@ -47,11 +47,6 @@ jobs:
         with:
           pattern: screenshots-*
           path: ${{ runner.temp }}/screenshots
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        if: inputs.screenshots
-        with:
-          name: purchase-sheet
-          path: ${{ runner.temp }}/purchase
       - name: Arrange screenshots for deliver
         if: inputs.screenshots
         run: |
@@ -88,8 +83,8 @@ jobs:
           LANG: en_US.UTF-8
         run: |
           export ASC_KEY_PATH="$RUNNER_TEMP/asc_key.p8"
-          # Free app, availability and the full-version purchase; creates only what is missing.
-          fastlane store_setup review_screenshot:"$RUNNER_TEMP/purchase/purchase-sheet.png"
+          # Free app and availability; creates only what is missing.
+          fastlane store_setup
           if [ "$SUBMIT" = einreichen ]; then
             if [ -n "$BUILD_NUMBER" ]; then
               fastlane submit build_number:"$BUILD_NUMBER"

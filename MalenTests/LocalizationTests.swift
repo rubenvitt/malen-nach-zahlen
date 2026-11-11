@@ -14,7 +14,7 @@ struct LocalizationTests {
     func keyTextsAreTranslated(_ language: String) throws {
         let path = try #require(Bundle.main.path(forResource: language, ofType: "lproj"))
         let bundle = try #require(Bundle(path: path))
-        for key in ["Los geht's", "Käufe wiederherstellen", "Zum Ausprobieren", "Freischalten für %@"] {
+        for key in ["Los geht's", "Zum Ausprobieren", "Neues Bild", "Deine Bilder"] {
             #expect(bundle.localizedString(forKey: key, value: nil, table: nil) != key, "\(language): \(key)")
         }
     }
