@@ -34,7 +34,7 @@ Referenz, bis der Swift-Port gleichwertig ist.
 
 - iPhone, Mac, Vision Pro. Nur iPad (`TARGETED_DEVICE_FAMILY: 2`).
 - iCloud-Sync, Konto, Teilen von Vorlagen zwischen Geräten, Werbung, Abos.
-  *(Nachtrag 2026-11-07: Käufe gibt es doch, als einmalige Vollversion, siehe §9.)*
+  *(Nachtrag 2026-11-07: Käufe gab es kurz doch, als einmalige Vollversion; seit 2026-11-11 wieder gestrichen, siehe §9.)*
 - Druckstärke, Pinsel-Texturen, Mischfarben, freie Farbwahl. Farben kommen nur
   aus der Palette der Vorlage.
 - Kategorie „Kinder" im App Store (bringt zusätzliche Review-Regeln).
@@ -244,7 +244,7 @@ Absturz.
   `ASC_KEY_P8_BASE64`, Variable `TESTFLIGHT_GROUP`.
 - **App Store Connect:** App-Datensatz „Griffel Malen nach Zahlen",
   `dev.rubeen.malen`, Primärsprache Deutsch, Kategorie Unterhaltung (Zweit:
-  Grafik und Design), kostenlos mit In-App-Kauf (§9). Externe Gruppe „Öffentlich" mit öffentlichem
+  Grafik und Design), kostenlos, ohne In-App-Kauf (§9). Externe Gruppe „Öffentlich" mit öffentlichem
   Link, Beta-App-Beschreibung, Datenschutz-URL = `PRIVACY.md` auf GitHub.
 - **App-Store-fähig von Anfang an:** `PrivacyInfo.xcprivacy` (keine Daten,
   benutzte Required-Reason-APIs deklariert), `ITSAppUsesNonExemptEncryption NO`,
@@ -258,6 +258,11 @@ Absturz.
 - Eigene Farbe für ein Feld wählen, Pinsel-Texturen.
 
 ## 9. Geschäftsmodell (2026-11-07)
+
+> **Nachtrag 2026-11-11 (Ruben): Die App ist komplett kostenlos.** Der In-App-Kauf „Vollversion“
+> (`dev.rubeen.malen.unlock`) wurde nie verkauft und nie eingereicht und ist samt Kaufseite,
+> Fotozähler und StoreKit-Konfiguration entfernt. Eigene Fotos sind unbegrenzt. Der Rest dieses
+> Abschnitts ist nur noch Geschichte.
 
 **Gratis laden, einmal freischalten (Ruben).** Keine Werbung **(Ruben)**, kein Abo.
 Griffel-Haltung wie bei Sudoku: einmal zahlen, keine Daten, kein Konto.

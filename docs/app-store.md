@@ -4,12 +4,7 @@ Was im Repo vorbereitet ist und was nur in App Store Connect geht. Aufbau wie be
 
 ## Geschäftsmodell
 
-Gratis laden, einmal freischalten, keine Werbung, kein Abo (Begründung in der [Design-Spec §9](superpowers/specs/2026-11-06-malen-design.md#9-geschäftsmodell-2026-11-07)).
-
-- **Gratis:** die 4 mitgelieferten Motive und **1 Bild aus einem eigenen Foto**, mit allen Funktionen.
-- **Vollversion** (`dev.rubeen.malen.unlock`, nicht verbrauchbar, Familienfreigabe an): unbegrenzt eigene Fotos.
-- Gezählt wird beim Anlegen („Los geht's“); Fotos im Editor ausprobieren bleibt frei. Löschen gibt kein Gratis-Foto zurück.
-- Die Kaufseite erscheint nur, wenn jemand ein weiteres eigenes Foto anlegen will, und enthält „Käufe wiederherstellen“.
+Komplett kostenlos: alle Funktionen, die 4 mitgelieferten Motive und beliebig viele eigene Fotos. Keine In-App-Käufe, keine Werbung, kein Abo (siehe [Design-Spec §9](superpowers/specs/2026-11-06-malen-design.md#9-geschäftsmodell-2026-11-07)).
 
 ## Im Repo
 
@@ -18,14 +13,12 @@ Gratis laden, einmal freischalten, keine Werbung, kein Abo (Begründung in der [
 | Version (`MARKETING_VERSION`), Kategorie Unterhaltung | `project.yml` |
 | Datenschutz-Manifest (keine Daten, kein Tracking) | `App/PrivacyInfo.xcprivacy` |
 | Exportkontrolle: keine Verschlüsselung | `ITSAppUsesNonExemptEncryption = NO` in `project.yml` |
-| Freischaltung (StoreKit 2, ohne Server) | `App/Purchase/` |
-| Test-Produkt für Läufe aus Xcode | `StoreKit/Malen.storekit` (im Schema eingetragen) |
 | Texte in neun Sprachen (Name, Untertitel, Beschreibung, Schlüsselwörter, Werbetext, URLs) | `fastlane/metadata/de-DE`, `en-US`, `fr-FR`, `es-ES`, `it`, `ja`, `ko`, `nl-NL`, `pt-BR` |
 | App-Texte in denselben neun Sprachen (String Catalogs) | `App/Localizable.xcstrings`, `App/InfoPlist.xcstrings` (Homescreen-Name) |
-| Notiz an das Prüfteam (inkl. Weg zur Kaufseite) | `fastlane/metadata/review_information/notes.txt` |
+| Notiz an das Prüfteam | `fastlane/metadata/review_information/notes.txt` |
 | Screenshots 13″ iPad quer, je Sprache | Workflow **Screenshots**, läuft auch im Workflow **App Store** mit |
 | Build | Workflow **TestFlight** bei jedem Push auf `main` |
-| Preis, Länder, In-App-Kauf, Altersfreigabe, Texte und Screenshots, optional einreichen | Workflow **App Store** (von Hand starten, nur auf `main`) |
+| Preis, Länder, Altersfreigabe, Texte und Screenshots, optional einreichen | Workflow **App Store** (von Hand starten, nur auf `main`) |
 | Freigegebene Version veröffentlichen | Workflow **Release** (von Hand starten, nur auf `main`) |
 
 ## Was der Workflow „App Store“ einrichtet
@@ -36,22 +29,14 @@ Vor dem Hochladen der Texte läuft `fastlane store_setup` (`fastlane/app_store_c
 |---|---|
 | Preis der App | kostenlos (Deutschland als Basis) |
 | Verfügbarkeit der App | alle Länder außer China (Festland braucht eine ICP-Nummer), neue Länder automatisch |
-| In-App-Kauf | `dev.rubeen.malen.unlock`, nicht verbrauchbar, Referenzname „Vollversion“, Familienfreigabe an |
-| Texte des Kaufs | neun Sprachen aus `fastlane/in_app_purchase.json` (Name ≤ 30, Beschreibung ≤ 45 Zeichen) |
-| Preis des Kaufs | 6,99 € (`FULL_VERSION_PRICE` im Fastfile), andere Länder rechnet Apple um |
-| Verfügbarkeit des Kaufs | wie die App |
-| Prüfnotiz und Screenshot des Kaufs | `fastlane/in_app_purchase_review_note.txt`; Screenshot der Kaufseite aus dem Workflow **Screenshots** (`testInAppPurchaseReviewScreenshot`, englisch, Preis im Simulator per `-uiTestPrice` gesetzt) |
 | Altersfreigabe | `fastlane/age_rating.json`, überall „Keine“ bzw. „Nein“ → 4+ (lädt `deliver` mit den Texten hoch) |
-
-Vertrag für bezahlte Apps, Bankverbindung, Steuerformulare und EU-Händlerstatus gelten fürs ganze Konto und sind durch Griffel Sudoku schon erledigt.
 
 ## Was nur im Browser geht
 
-1. **App-Datenschutz:** „Keine Daten erhoben“ auswählen und veröffentlichen. Den Kauf wickelt Apple ab; das zählt nicht als Datenerhebung der App. Dafür gibt es keine API.
-2. **Erstes Einreichen**, weil der erste In-App-Kauf zusammen mit einer App-Version geprüft werden muss und das nur auf der Versionsseite geht: Version 1.0 öffnen, Build wählen, unter *In-App-Käufe und Abonnements* die Vollversion hinzufügen, **Zur Prüfung einreichen**.
-3. Nach der Freigabe Workflow **Release** starten (oder in App Store Connect veröffentlichen).
+1. **App-Datenschutz:** „Keine Daten erhoben“ auswählen und veröffentlichen. Dafür gibt es keine API.
+2. Nach der Freigabe Workflow **Release** starten (oder in App Store Connect veröffentlichen).
 
-Ab dem zweiten Update geht das Einreichen per Workflow (`submit` = `einreichen`).
+Eingereicht wird per Workflow (`submit` = `einreichen`), auch schon die erste Version; ohne In-App-Kauf muss nichts von Hand an die Version gehängt werden.
 
 ## Workflow „App Store"
 

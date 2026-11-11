@@ -75,21 +75,3 @@ jobs:
           name: screenshots-${{ matrix.name }}
           path: ${{ runner.temp }}/screenshots/*/*.png
           if-no-files-found: error
-      - name: Purchase sheet for App Review
-        env:
-          TEST_RUNNER_SCREENSHOTS: "1"
-        run: |
-          xcodebuild test-without-building -scheme Malen -destination "id=$UDID" \
-            -derivedDataPath "$RUNNER_TEMP/dd" -only-testing:MalenUITests/SmokeTests/testInAppPurchaseReviewScreenshot \
-            -resultBundlePath "$RUNNER_TEMP/purchase.xcresult" CODE_SIGNING_ALLOWED=NO
-          OUT="$RUNNER_TEMP/purchase"
-          xcrun xcresulttool export attachments --path "$RUNNER_TEMP/purchase.xcresult" --output-path "$OUT"
-          file=$(jq -r '.[].attachments[0].exportedFileName' "$OUT/manifest.json")
-          mv "$OUT/$file" "$OUT/purchase-sheet.png"
-          rm "$OUT/manifest.json"
-          ls -la "$OUT"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: purchase-sheet
-          path: ${{ runner.temp }}/purchase/purchase-sheet.png
-          if-no-files-found: error

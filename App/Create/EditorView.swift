@@ -6,19 +6,10 @@ struct EditorView: View {
     let onStart: (UUID) -> Void
 
     @Environment(ArtworkStore.self) private var store
-    @Environment(FullVersion.self) private var fullVersion
     @Environment(\.dismiss) private var dismiss
     @State private var model = EditorModel()
     @State private var editing = false
     @State private var starting = false
-    @State private var showsFullVersion = false
-
-    private var isPhoto: Bool {
-        if case .photo = source { true } else { false }
-    }
-
-    /// Own photos beyond the free one need the full version; motifs never do.
-    private var needsFullVersion: Bool { isPhoto && !fullVersion.canCreatePhoto }
 
     var body: some View {
         GeometryReader { geo in
@@ -41,9 +32,6 @@ struct EditorView: View {
         .navigationTitle(model.title)
         .navigationBarTitleDisplayMode(.inline)
         .task { await model.load(source) }
-        .sheet(isPresented: $showsFullVersion) {
-            FullVersionSheet { start() }
-        }
     }
 
     // MARK: Preview
@@ -112,7 +100,7 @@ struct EditorView: View {
                     if starting {
                         ProgressView().tint(.white)
                     } else {
-                        Image(systemName: needsFullVersion ? "lock.fill" : "paintbrush.pointed.fill")
+                        Image(systemName: "paintbrush.pointed.fill")
                     }
                     Text("Los geht's")
                 }
@@ -125,15 +113,6 @@ struct EditorView: View {
             .buttonStyle(PressableStyle())
             .disabled(starting || model.palette.isEmpty)
             .accessibilityIdentifier("startPainting")
-
-            if isPhoto && !fullVersion.isUnlocked {
-                Text(needsFullVersion ? "Für weitere eigene Fotos brauchst du die Vollversion."
-                                      : "Dein erstes eigenes Foto ist gratis.")
-                    .font(.rounded(.footnote, weight: .medium))
-                    .foregroundStyle(Theme.softInk)
-                    .frame(maxWidth: .infinity)
-                    .multilineTextAlignment(.center)
-            }
         }
         .padding(24)
         .background(Theme.card, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
@@ -186,7 +165,6 @@ struct EditorView: View {
     }
 
     private func start() {
-        guard !needsFullVersion else { showsFullVersion = true; return }
         starting = true
         Task {
             defer { starting = false }
@@ -195,7 +173,6 @@ struct EditorView: View {
             let thumb = await Task.detached(priority: .userInitiated) { TemplateRenderer.thumbnailJPEG(template) }.value
             guard let meta = try? store.create(template: template, title: title, options: options, thumbnail: thumb)
             else { return }
-            if isPhoto { fullVersion.photoCreated() }
             onStart(meta.id)
         }
     }
