@@ -48,6 +48,7 @@ struct GalleryView: View {
                         MotifCard(motif: motif) { path.append(.editor(.motif(motif))) }
                     }
                 }
+                ForEach(MotifPack.all) { pack in packRow(pack) }
             }
             .padding(.horizontal, 32)
             .padding(.vertical, 24)
@@ -102,6 +103,29 @@ struct GalleryView: View {
             Text(title).font(.rounded(.title2, weight: .bold)).foregroundStyle(Theme.ink)
                 .accessibilityAddTraits(.isHeader)
             LazyVGrid(columns: columns, spacing: 28, content: content)
+        }
+    }
+
+    /// One pack per row, scrolling sideways.
+    private func packRow(_ pack: MotifPack) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(pack.title).font(.rounded(.title2, weight: .bold)).foregroundStyle(Theme.ink)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer(minLength: 8)
+                Text("\(pack.motifs.count) Motive").font(.rounded(.subheadline, weight: .medium))
+                    .foregroundStyle(Theme.softInk)
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(alignment: .top, spacing: 24) {
+                    ForEach(pack.motifs) { motif in
+                        MotifCard(motif: motif) { path.append(.editor(.motif(motif))) }.frame(width: 230)
+                    }
+                }
+                .padding(.horizontal, 32)
+            }
+            .scrollClipDisabled()   // keeps the cards' shadows
+            .padding(.horizontal, -32)
         }
     }
 
@@ -248,6 +272,7 @@ private struct MotifCard: View {
     let action: () -> Void
 
     var body: some View {
+        // shortcut: decodes the full-size asset for a thumbnail, add prepared thumbnails if the gallery stutters
         let image = motif.image
         VStack(alignment: .leading, spacing: 10) {
             Button(action: action) {

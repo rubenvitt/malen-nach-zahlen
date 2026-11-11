@@ -1,6 +1,6 @@
 No login or demo account needed. The app works fully offline and collects no data.
 
-How to use: pick one of the four bundled motifs (or "New Picture" for an own photo), adjust colors and detail, tap "Let's Go" and paint. Painting works with Apple Pencil; on a device where no pencil has been used yet, a finger paints too (once a pencil paints, fingers pan, zoom and rotate).
+How to use: pick one of the bundled motifs in the gallery, which shows four starter motifs and ten themed packs as rows with over 70 motifs in total (or "New Picture" for an own photo), adjust colors and detail, tap "Let's Go" and paint. Painting works with Apple Pencil; on a device where no pencil has been used yet, a finger paints too (once a pencil paints, fingers pan, zoom and rotate).
 
 The app is completely free and has no in-app purchases: the bundled motifs and any number of own photos can be used without restrictions.
 
