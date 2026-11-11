@@ -59,7 +59,7 @@ Der UI-Test `testAppStoreScreenshots` erzeugt je Sprache vier Bilder im Querform
 
 ## Updates
 
-1. `MARKETING_VERSION` in `project.yml` erhöhen und `fastlane/metadata/*/release_notes.txt` („Neuigkeiten“) schreiben. Für Version 1.0 gibt es keine Neuigkeiten, deshalb fehlen die Dateien noch.
+1. `MARKETING_VERSION` in `project.yml` erhöhen und `fastlane/metadata/*/release_notes.txt` („Neuigkeiten“) schreiben.
 2. Mergen: Der Workflow **TestFlight** baut die neue Version.
 3. Workflow **App Store** mit `submit` = `einreichen` starten.
 4. Nach Apples Freigabe Workflow **Release** mit `confirm` = `veröffentlichen` starten.
