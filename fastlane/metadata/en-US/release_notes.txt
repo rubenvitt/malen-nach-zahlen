@@ -1,1 +1,4 @@
-Griffel is now completely free: every picture and feature is available without a purchase.
+- 68 new pictures in 10 themed collections
+- Borders are now smooth, flowing lines
+- Free painting: paint anywhere, even over finished fields with another color
+- Nothing fills itself in anymore, every field stays exactly as you paint it

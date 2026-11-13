@@ -13,7 +13,6 @@ struct PaintView: View {
     @State private var completion: CompletionView.Mode?
     @State private var failed = false
     @State private var palette: [PaletteColor] = []
-    @AppStorage("overpaintProtection") private var overpaintProtection = true
 
     private var title: String { store.artworks.first { $0.id == id }?.title ?? "" }
 
@@ -23,7 +22,7 @@ struct PaintView: View {
             if let session {
                 PaintCanvas(session: session).ignoresSafeArea()
                 PaintChrome(session: session, palette: palette, title: title,
-                            overpaintProtection: $overpaintProtection, onBack: close,
+                            onBack: close,
                             onUndo: { session.undo() },   // undo fires onStrokeEnded → autosave
                             onShowFinished: { completion = .look })
                 if let completion {
@@ -50,7 +49,6 @@ struct PaintView: View {
         .task { await load() }
         .onChange(of: scenePhase) { if scenePhase != .active { autosaver?.flush() } }
         .onDisappear { autosaver?.flush() }
-        .onChange(of: overpaintProtection) { _, on in session?.overpaintProtection = on }
         .onChange(of: session?.isComplete ?? false) { _, done in
             if done { autosaver?.flush(); completion = .celebrate }
         }
@@ -67,7 +65,6 @@ struct PaintView: View {
         #endif
         let session = PaintingSession(template: template, paintLayerPNG: paint,
                                       paintColors: store.paintColorData(id))
-        session.overpaintProtection = overpaintProtection
         let saver = Autosaver(id: id, store: store, session: session)
         session.onStrokeEnded = { [weak saver] in saver?.changed() }
         if let open = (0..<template.palette.count).first(where: { !session.completedColors.contains($0) }) {
@@ -94,28 +91,11 @@ private struct PaintChrome: View {
     @Bindable var session: PaintingSession
     let palette: [PaletteColor]
     let title: String
-    @Binding var overpaintProtection: Bool
     let onBack: () -> Void
     let onUndo: () -> Void
     let onShowFinished: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var protectionHint: Task<Void, Never>?
-    @State private var showsProtectionHint = false
-
-    private func toggleProtection() {
-        withAnimation(Theme.spring) {
-            overpaintProtection.toggle()
-            showsProtectionHint = true
-        }
-        protectionHint?.cancel()
-        protectionHint = Task {
-            try? await Task.sleep(for: .seconds(2))
-            guard !Task.isCancelled else { return }
-            withAnimation(Theme.spring) { showsProtectionHint = false }
-        }
-    }
-
     private var order: [Int] {
         let done = session.completedColors
         return palette.indices.sorted { a, b in
@@ -157,11 +137,6 @@ private struct PaintChrome: View {
                 if session.isComplete {
                     RoundButton(systemImage: "sparkles", label: "Fertiges Bild ansehen", action: onShowFinished)
                 }
-                RoundButton(systemImage: overpaintProtection ? "shield.lefthalf.filled" : "shield.slash",
-                            label: overpaintProtection ? "Übermalschutz an" : "Übermalschutz aus",
-                            action: toggleProtection)
-                    .accessibilityHint("Schaltet um, ob Farbe nur in Felder ihrer Nummer kommt")
-                    .accessibilityIdentifier("overpaintProtection")
                 BrushPicker(brush: $session.brush)
                 RoundButton(systemImage: "arrow.uturn.backward", label: "Rückgängig", action: onUndo)
                     .disabled(!session.canUndo)
@@ -170,16 +145,6 @@ private struct PaintChrome: View {
                 }
             }
             .foregroundStyle(Theme.ink)
-            if showsProtectionHint {
-                Text(overpaintProtection ? "Übermalschutz an: Farbe bleibt in ihren Feldern"
-                                         : "Übermalschutz aus: Farbe landet in jedem Feld")
-                    .font(.rounded(.subheadline, weight: .semibold))
-                    .foregroundStyle(Theme.ink)
-                    .padding(.horizontal, 16).padding(.vertical, 10)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .accessibilityHidden(true)
-            }
             Spacer()
             ViewThatFits(in: .horizontal) {
                 pots
@@ -193,12 +158,6 @@ private struct PaintChrome: View {
         .padding(.horizontal, 20).padding(.vertical, 16)
         .sensoryFeedback(.selection, trigger: session.selectedColor)
         .sensoryFeedback(.success, trigger: session.completedColors.count)
-        .onChange(of: session.completedColors) { _, done in
-            // The finished colour slides to the end; jump to the next open one.
-            guard done.contains(session.selectedColor),
-                  let next = order.first(where: { !done.contains($0) }) else { return }
-            withAnimation(Theme.spring) { session.selectedColor = next }
-        }
     }
 }
 

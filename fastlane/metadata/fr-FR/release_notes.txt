@@ -1,1 +1,4 @@
-Griffel est désormais entièrement gratuit : toutes les images et fonctions sont disponibles sans achat.
+- 68 nouveaux motifs dans 10 collections thématiques
+- Les contours sont désormais des lignes lisses et souples
+- Peinture libre : peignez partout, même par-dessus des zones terminées avec une autre couleur
+- Plus rien ne se remplit tout seul, chaque zone reste telle que vous la peignez

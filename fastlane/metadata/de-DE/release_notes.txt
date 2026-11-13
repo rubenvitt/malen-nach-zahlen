@@ -1,1 +1,4 @@
-Griffel ist jetzt komplett kostenlos: Alle Bilder und Funktionen stehen ohne Kauf zur Verfügung.
+- 68 neue Motive in 10 Themenreihen
+- Ränder sind jetzt glatte, geschwungene Linien
+- Freies Malen: Du kannst überall malen, auch mit einer anderen Farbe über fertige Felder
+- Nichts füllt sich mehr von selbst, jedes Feld bleibt so, wie du es malst

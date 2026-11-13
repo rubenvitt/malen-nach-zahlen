@@ -24,7 +24,14 @@ Referenz, bis der Swift-Port gleichwertig ist.
   An heißt: Ein Strich bleibt in dem einen Feld der gewählten Nummer, in dem er
   ansetzt. Aus heißt: keine Felder, man malt frei über alles (nur fertige Felder
   bleiben gesperrt); falsche Farbe zählt nicht und muss richtig übermalt werden.
+  *Nachtrag 2026-11-13 (Ruben: „Das ist für Erwachsene!“):* Übermalschutz und
+  Sperre fertiger Felder sind entfallen; man malt immer frei, auch mit anderer
+  Farbe über fertige Felder (die dann wieder offen sind). Nichts füllt sich von
+  selbst: Ein Feld zählt als fertig, wenn höchstens ein Zehntel (bei kleinen
+  Feldern ein Pixel) fehlt, bleibt aber so, wie es gemalt wurde.
 - **Dünner schwarzer Rand (Ruben)** um jedes Feld, immer über der Farbe.
+  *Nachtrag 2026-11-13 (Ruben):* als glatte, geschwungene Linie, nicht als
+  Pixeltreppe.
 - **Farbanzahl beim Erstellen einstellbar, mit Live-Vorschau (Ruben).** Schieber
   bewegen → Vorschau der Vorlage aktualisiert sich währenddessen.
 - **Schöne UI, muss Spaß machen (Ruben).** Siehe §5.

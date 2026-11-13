@@ -26,9 +26,9 @@ struct StrokeChange: Sendable {
 /// The paint bitmap and all progress bookkeeping, without any UIKit.
 ///
 /// Per paint pixel the layer stores *coverage* (alpha 0...255) and the palette index of the paint
-/// (`paintColor`). With the overpaint protection on, a stroke stays inside the one field of its own
-/// colour it started in, so `paintColor` always equals the template colour there. With it off,
-/// paint goes anywhere except finished fields; a wrong colour does not count as painted.
+/// (`paintColor`). Paint goes anywhere, across field borders and over finished fields; a wrong
+/// colour does not count as painted. Nothing is ever filled in automatically: a field counts as
+/// done once almost all of it carries its colour, and painting over it can undo that again.
 final class PaintLayer {
     /// Paint pixels per grid pixel (as in the web prototype).
     static let scale = 2
@@ -44,7 +44,7 @@ final class PaintLayer {
 
     private(set) var paintedOfField: [Int32]
     private(set) var fieldComplete: [Bool]
-    private var fieldBounds: [(x0: Int, y0: Int, x1: Int, y1: Int)]   // grid, half-open
+    /// Progress per colour in grid pixels: painted pixels, or the whole field once it is done.
     private(set) var paintedOfColor: [Int]
     private(set) var sizeOfColor: [Int]
     private(set) var completeFieldsOfColor: [Int]
@@ -60,8 +60,6 @@ final class PaintLayer {
     private var stroke: Snapshot?
     private var strokeColor = 0
     private var strokeRadius = 1.0
-    private var strokeProtected = true
-    private var strokeField: Int?     // protected: the one field this stroke may paint, fixed at its first hit
     private var lastPoint: CGPoint?
     private var preview: (rect: PixelRect, pixels: [UInt8])?
 
@@ -83,19 +81,11 @@ final class PaintLayer {
         let fields = template.sizeOfField.count, colorCount = template.palette.count
         paintedOfField = [Int32](repeating: 0, count: fields)
         fieldComplete = [Bool](repeating: false, count: fields)
-        fieldBounds = Array(repeating: (Int.max, Int.max, 0, 0), count: fields)
         paintedOfColor = [Int](repeating: 0, count: colorCount)
         sizeOfColor = [Int](repeating: 0, count: colorCount)
         completeFieldsOfColor = [Int](repeating: 0, count: colorCount)
         fieldsOfColor = [Int](repeating: 0, count: colorCount)
 
-        let w = template.width
-        for i in 0..<(w * template.height) {
-            let f = Int(template.fieldOfPixel[i]), x = i % w, y = i / w
-            var b = fieldBounds[f]
-            b = (min(b.x0, x), min(b.y0, y), max(b.x1, x + 1), max(b.y1, y + 1))
-            fieldBounds[f] = b
-        }
         for f in 0..<fields {
             let c = Int(template.colorOfField[f]), size = Int(template.sizeOfField[f])
             sizeOfColor[c] += size
@@ -119,44 +109,40 @@ final class PaintLayer {
     var completedColors: Set<Int> { Set(sizeOfColor.indices.filter(isColorComplete)) }
     var isComplete: Bool { sizeOfColor.indices.allSatisfy(isColorComplete) }
 
-    private func setPainted(_ f: Int, _ value: Int32) {
-        let delta = Int(value - paintedOfField[f])
-        paintedOfField[f] = value
+    /// What a field adds to the progress: all of it once done, so a finished picture reads 100 %
+    /// even though the last bits of each field are left to the painter.
+    private func credit(_ f: Int) -> Int { Int(fieldComplete[f] ? template.sizeOfField[f] : paintedOfField[f]) }
+
+    private func addCredit(_ f: Int, since old: Int) {
+        let delta = credit(f) - old
         paintedOfColor[Int(template.colorOfField[f])] += delta
         totalPainted += delta
     }
 
+    private func setPainted(_ f: Int, _ value: Int32) {
+        let old = credit(f)
+        paintedOfField[f] = value
+        addCredit(f, since: old)
+    }
+
     private func setComplete(_ f: Int, _ value: Bool) {
         guard fieldComplete[f] != value else { return }
+        let old = credit(f)
         fieldComplete[f] = value
         completeFieldsOfColor[Int(template.colorOfField[f])] += value ? 1 : -1
+        addCredit(f, since: old)
     }
 
     // MARK: Stroke API (points in paint pixels)
 
-    /// `radius` in paint pixels; it stays fixed for the stroke. `protected` keeps the paint out of
-    /// fields of other colours (the overpaint protection).
-    func beginStroke(color: Int, radius: Double, protected: Bool = true) {
+    /// `radius` in paint pixels; it stays fixed for the stroke.
+    func beginStroke(color: Int, radius: Double) {
         if stroke != nil { _ = endStroke() }
         stroke = Snapshot()
         strokeColor = color
         strokeRadius = max(0.75, radius)
-        strokeProtected = protected
-        strokeField = nil
         lastPoint = nil
     }
-
-    /// The open field of the stroke's colour under `p`, which a protected stroke then keeps to.
-    private func acceptingField(at p: CGPoint) -> Int? {
-        let x = Int(p.x.rounded(.down)), y = Int(p.y.rounded(.down))
-        guard x >= 0, y >= 0, x < width, y < height else { return nil }
-        let f = Int(template.fieldOfPixel[(y >> 1) * template.width + (x >> 1)])
-        guard !fieldComplete[f], Int(template.colorOfField[f]) == strokeColor else { return nil }
-        return f
-    }
-
-    /// Unprotected strokes paint everywhere; protected ones first need their field.
-    private var strokeCanPaint: Bool { !strokeProtected || strokeField != nil }
 
     /// Commits a segment chain through `points` and shows `predicted` as a temporary preview that
     /// never counts towards progress, undo or export.
@@ -165,17 +151,12 @@ final class PaintLayer {
         var change = StrokeChange(dirty: clearPreview())
         var touched = Set<Int32>()
         for p in points {
-            if !strokeCanPaint {
-                // Until the pencil reaches an open field of its colour, nothing happens.
-                guard let f = acceptingField(at: p) else { continue }
-                strokeField = f
-            }
             change.dirty = rasterize(from: lastPoint ?? p, to: p, commit: true, touched: &touched)
                 .map { $0.union(change.dirty) } ?? change.dirty
             lastPoint = p
         }
-        completeFields(touched, into: &change)
-        if var a = lastPoint, strokeCanPaint, !predicted.isEmpty {
+        updateCompletion(touched, into: &change)
+        if var a = lastPoint, !predicted.isEmpty {
             // Back up the whole area first so the preview can be taken back byte-exactly.
             let bound = predicted.reduce(boundsOfSegment(a, a)) { $0.union(boundsOfSegment($1, $1)) }
             if !bound.isEmpty {
@@ -200,7 +181,6 @@ final class PaintLayer {
             change.committed = true
         }
         stroke = nil
-        strokeField = nil
         lastPoint = nil
         return change
     }
@@ -210,7 +190,6 @@ final class PaintLayer {
         let dirty = clearPreview()
         guard let s = stroke else { return dirty }
         stroke = nil
-        strokeField = nil
         lastPoint = nil
         return restore(s).union(dirty)
     }
@@ -244,13 +223,11 @@ final class PaintLayer {
                          y1: min(height, Int((max(a.y, b.y) + r).rounded(.up))))
     }
 
-    /// Anti-aliased round-capped segment, clipped to `strokeField` when protected and always to open
-    /// fields. Paint of the same colour is max-combined; another colour is painted over
-    /// where the new paint is solid enough.
+    /// Anti-aliased round-capped segment. Paint of the same colour is max-combined; another colour
+    /// is painted over where the new paint is solid enough.
     private func rasterize(from a: CGPoint, to b: CGPoint, commit: Bool, touched: inout Set<Int32>) -> PixelRect? {
         let box = boundsOfSegment(a, b)
-        guard !box.isEmpty, strokeColor < template.palette.count, strokeCanPaint else { return nil }
-        let protected = strokeProtected, only = Int32(strokeField ?? -1)
+        guard !box.isEmpty, strokeColor < template.palette.count else { return nil }
         let saved = commit ? saveTiles(box) : []
         let r = strokeRadius, ax = Double(a.x), ay = Double(a.y)
         let dx = Double(b.x) - ax, dy = Double(b.y) - ay
@@ -265,7 +242,6 @@ final class PaintLayer {
                 let py = Double(y) + 0.5, grow = (y >> 1) * gw
                 for x in box.x0..<box.x1 {
                     let gi = grow + (x >> 1)
-                    guard !protected || fieldOf[gi] == only else { continue }
                     let px = Double(x) + 0.5
                     var t = len2 > 0 ? ((px - ax) * dx + (py - ay) * dy) / len2 : 0
                     t = min(1, max(0, t))
@@ -281,7 +257,6 @@ final class PaintLayer {
                         guard new >= Self.covered || new > old else { continue }
                     }
                     let field = Int(fieldOf[gi])
-                    if fieldComplete[field] { continue }
                     cov[i] = new
                     col[i] = color
                     changed = true
@@ -297,7 +272,7 @@ final class PaintLayer {
                                 stroke?.fields[field32] = (paintedOfField[field], fieldComplete[field])
                             }
                             setPainted(field, paintedOfField[field] + (now ? 1 : -1))
-                            if now { touched.insert(field32) }
+                            touched.insert(field32)
                         }
                     }
                 }
@@ -308,38 +283,25 @@ final class PaintLayer {
         return changed ? box : nil
     }
 
-    /// Fields at ≥ 95 % get filled cleanly and completely.
-    private func completeFields(_ fields: Set<Int32>, into change: inout StrokeChange) {
+    /// A field counts as done when at most a tenth of it (and in tiny fields one grid pixel) still
+    /// lacks its colour. Nothing gets filled in: what the picture shows is exactly what was painted.
+    static func isDone(painted: Int32, size: Int32) -> Bool {
+        let missing = Int(size - painted)
+        return painted > 0 && (missing <= 1 || missing * 10 <= Int(size))
+    }
+
+    /// Re-checks fields whose count changed: newly done ones are reported, painted-over ones reopen.
+    private func updateCompletion(_ fields: Set<Int32>, into change: inout StrokeChange) {
         for field in fields.sorted() {
-            let f = Int(field), size = template.sizeOfField[f]
-            guard !fieldComplete[f], Int(paintedOfField[f]) * 100 >= Int(size) * 95 else { continue }
-            let rect = fill(f)
-            if stroke?.fields[field] == nil { stroke?.fields[field] = (paintedOfField[f], false) }
-            setPainted(f, size)
-            setComplete(f, true)
-            change.dirty = rect.union(change.dirty)
+            let f = Int(field)
+            let done = Self.isDone(painted: paintedOfField[f], size: template.sizeOfField[f])
+            guard done != fieldComplete[f] else { continue }
+            setComplete(f, done)
+            guard done else { continue }
             change.completedFields.append(field)
             let c = Int(template.colorOfField[f])
             if isColorComplete(c) { change.completedColors.append(c) }
         }
-    }
-
-    private func fill(_ f: Int) -> PixelRect {
-        let b = fieldBounds[f], s = Self.scale, gw = template.width, color = template.colorOfField[f]
-        let rect = PixelRect(x0: b.x0 * s, y0: b.y0 * s, x1: b.x1 * s, y1: b.y1 * s)
-        if stroke != nil { saveTiles(rect) }
-        for gy in b.y0..<b.y1 {
-            for gx in b.x0..<b.x1 where template.fieldOfPixel[gy * gw + gx] == Int32(f) {
-                for sy in 0..<s {
-                    for sx in 0..<s {
-                        let i = (gy * s + sy) * width + gx * s + sx
-                        coverage[i] = 255
-                        paintColor[i] = color
-                    }
-                }
-            }
-        }
-        return rect
     }
 
     // MARK: Tiles, preview
@@ -450,8 +412,7 @@ final class PaintLayer {
         return out as Data
     }
 
-    /// The paint colours (zlib), or nil while every bit of paint has its template colour, which is
-    /// always the case with the overpaint protection on.
+    /// The paint colours (zlib), or nil while every bit of paint has its template colour.
     func colorData() -> Data? {
         var cov = coverage, col = paintColor
         if let p = preview {   // never export predictions
@@ -515,10 +476,7 @@ final class PaintLayer {
         }
         for f in counts.indices {
             setPainted(f, counts[f])
-            if Int(counts[f]) * 100 >= Int(template.sizeOfField[f]) * 95 {
-                if counts[f] < template.sizeOfField[f] { _ = fill(f); setPainted(f, template.sizeOfField[f]) }
-                setComplete(f, true)
-            }
+            setComplete(f, Self.isDone(painted: counts[f], size: template.sizeOfField[f]))
         }
     }
 }

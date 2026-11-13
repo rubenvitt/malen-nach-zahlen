@@ -4,7 +4,7 @@ VOTRE PHOTO EN MODÈLE
 Choisissez une photo et l'app la transforme en zones aux fins contours noirs, avec des numéros. Deux curseurs règlent le nombre de couleurs et la finesse des zones. L'aperçu vous montre aussitôt le résultat.
 
 PEINDRE COMME AU PINCEAU
-Vous peignez trait après trait avec l'Apple Pencil. La protection garde la couleur dans sa zone, chaque bord reste net. Vous préférez peindre librement ? Désactivez-la.
+Vous peignez trait après trait avec l'Apple Pencil, librement et avec précision, comme sur du papier. Rien ne se remplit tout seul : la netteté de chaque bord ne dépend que de vous.
 
 EN TOUTE TRANQUILLITÉ
 Pas de chrono, pas de points, pas de notifications. Avec les doigts, vous déplacez, zoomez et tournez l'image comme une feuille de papier. Les zones terminées se remplissent proprement, les couleurs terminées sont cochées.

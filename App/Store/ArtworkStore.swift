@@ -15,7 +15,7 @@ struct ArtworkMeta: Codable, Identifiable, Hashable, Sendable {
 }
 
 /// One folder per artwork: `<root>/<uuid>/{template.bin, paint.png, thumb.jpg, meta.json}`.
-/// While some paint has a wrong colour (overpaint protection off), `paint.png` carries the paint
+/// While some paint has a wrong colour, `paint.png` carries the paint
 /// colours as a trailer, so both always change together.
 /// `meta.json` is written last, so a folder without it (crash mid-create) is simply skipped.
 @MainActor @Observable final class ArtworkStore {

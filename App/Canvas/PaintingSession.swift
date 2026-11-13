@@ -21,9 +21,6 @@ enum BrushSize: CaseIterable, Codable {
     let template: Template
     var selectedColor = 0
     var brush: BrushSize = .medium
-    /// Overpaint protection: paint only lands in fields of the selected colour. Off, it lands in
-    /// any field, and a wrong colour has to be painted over again.
-    var overpaintProtection = true
     private(set) var progressByColor: [Double]
     private(set) var progress: Double = 0
     private(set) var completedColors: Set<Int> = []
@@ -64,7 +61,7 @@ enum BrushSize: CaseIterable, Codable {
     func paintLayerPNG() -> Data { layer.pngData() }
 
     /// Which colour the paint has, saved next to `paintLayerPNG()`. Nil while all paint has the
-    /// right colour, which is always the case with the overpaint protection on.
+    /// right colour.
     func paintColorData() -> Data? { layer.colorData() }
 
     /// The picture as painted so far, on white. `showLines` adds borders and the numbers that are
@@ -93,8 +90,7 @@ enum BrushSize: CaseIterable, Codable {
     // MARK: Used by PaintCanvasView (points and radius in paint pixels)
 
     func beginStroke(radius: Double) {
-        layer.beginStroke(color: min(max(0, selectedColor), template.palette.count - 1), radius: radius,
-                          protected: overpaintProtection)
+        layer.beginStroke(color: min(max(0, selectedColor), template.palette.count - 1), radius: radius)
     }
 
     func continueStroke(_ points: [CGPoint], predicted: [CGPoint]) -> PixelRect? {
