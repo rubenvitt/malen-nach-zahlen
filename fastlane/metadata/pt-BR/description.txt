@@ -4,7 +4,7 @@ SUA FOTO COMO MODELO
 Escolha uma foto e o app a transforma em áreas com contornos pretos finos e números. Dois controles definem quantas cores há e o quão finas são as áreas. A pré-visualização mostra o resultado na hora.
 
 PINTE COMO COM UM PINCEL
-Você pinta traço a traço com o Apple Pencil. A proteção mantém a cor dentro da sua área, e cada borda fica limpa. Prefere pintar livremente? É só desativá-la.
+Você pinta traço a traço com o Apple Pencil, com liberdade e precisão, como no papel. Nada se preenche sozinho, e o capricho de cada borda depende só de você.
 
 COM CALMA
 Sem cronômetro, sem pontos, sem notificações. Com os dedos você move, amplia e gira a imagem como uma folha de papel. Áreas concluídas são preenchidas por inteiro, cores concluídas ganham um visto.

@@ -96,7 +96,7 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
                 let tile = CALayer()
                 tile.frame = CGRect(x: CGFloat(x) / s, y: CGFloat(y) / s,
                                     width: CGFloat(min(t, layer.width - x)) / s, height: CGFloat(min(t, layer.height - y)) / s)
-                tile.magnificationFilter = .nearest   // paint edges stay exactly on the grid lines
+                tile.magnificationFilter = .linear    // zoomed in, brush edges stay soft instead of blocky
                 tile.minificationFilter = .linear
                 paint.addSublayer(tile)
                 paintTiles.append(tile)
