@@ -1,1 +1,4 @@
-Griffel is nu helemaal gratis: alle afbeeldingen en functies zijn beschikbaar zonder aankoop.
+- 68 nieuwe afbeeldingen in 10 themareeksen
+- Randen zijn nu vloeiende, gladde lijnen
+- Vrij schilderen: schilder overal, ook met een andere kleur over voltooide vlakken
+- Niets vult zichzelf meer in, elk vlak blijft precies zoals jij het schildert

@@ -1,1 +1,4 @@
-Griffel ora è completamente gratuito: tutte le immagini e le funzioni sono disponibili senza acquisti.
+- 68 nuovi soggetti in 10 collezioni a tema
+- I bordi ora sono linee morbide e fluide
+- Pittura libera: dipingi ovunque, anche sopra aree finite con un altro colore
+- Niente si riempie più da solo, ogni area resta come la dipingi
