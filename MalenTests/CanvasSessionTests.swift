@@ -43,7 +43,8 @@ import Testing
     s.beginStroke(radius: 1.2)
     _ = s.continueStroke([CGPoint(x: 1, y: 1), CGPoint(x: 12, y: 6)], predicted: [])
     _ = s.endStroke()
-    let back = PaintingSession(template: canvasTestTemplate(), paintLayerPNG: s.paintLayerPNG())
+    let back = PaintingSession(template: canvasTestTemplate(), paintLayerPNG: s.paintLayerPNG(),
+                               paintColors: s.paintColorData())
     #expect(back.layer.coverage == s.layer.coverage)
     #expect(back.progressByColor == s.progressByColor)
 

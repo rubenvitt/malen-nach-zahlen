@@ -58,7 +58,7 @@ private func strokeAcross(_ l: PaintLayer, color: Int, y: CGFloat, radius: Doubl
     _ = l.continueStroke([CGPoint(x: 2, y: 4)])
     #expect(l.endStroke().committed)
     #expect(l.paintColor[3 * l.width + 3] == 1)
-    #expect(l.paintedOfField[0] == 12)
+    #expect(l.paintedOfField[0] == 13)
     #expect(!l.fieldComplete[0])
     _ = l.undo()
     #expect(l.fieldComplete[0])
@@ -115,15 +115,18 @@ private func strokeAcross(_ l: PaintLayer, color: Int, y: CGFloat, radius: Doubl
     let l = PaintLayer(template: canvasTestTemplate())
     #expect(l.progress == 0)
     // Grid rows 0–1 of field 0: 8 of 16 pixels.
-    l.beginStroke(color: 0, radius: 2)
-    var change = l.continueStroke([CGPoint(x: 1, y: 2), CGPoint(x: 6, y: 2)])
+    // Paint pixel centres sit at 2·grid + 1.5.
+    l.beginStroke(color: 0, radius: 0.75)
+    var change = l.continueStroke([CGPoint(x: 1.5, y: 1.5), CGPoint(x: 7.5, y: 1.5), CGPoint(x: 7.5, y: 3.5),
+                                   CGPoint(x: 1.5, y: 3.5)])
     _ = l.endStroke()
     #expect(l.paintedOfField[0] == 8)
     #expect(l.paintedOfField[1] == 0 && l.paintedOfField[2] == 0)
     #expect(change.completedFields.isEmpty)
     // 15 of 16: one pixel left counts as done, but that pixel stays blank.
     l.beginStroke(color: 0, radius: 0.75)
-    change = l.continueStroke([CGPoint(x: 1, y: 5), CGPoint(x: 7, y: 5), CGPoint(x: 7, y: 7), CGPoint(x: 3, y: 7)])
+    change = l.continueStroke([CGPoint(x: 1.5, y: 5.5), CGPoint(x: 7.5, y: 5.5), CGPoint(x: 7.5, y: 7.5),
+                               CGPoint(x: 3.5, y: 7.5)])
     _ = l.endStroke()
     #expect(l.paintedOfField[0] == 15)
     #expect(change.completedFields == [0])
@@ -132,7 +135,8 @@ private func strokeAcross(_ l: PaintLayer, color: Int, y: CGFloat, radius: Doubl
     #expect(l.progress(ofColor: 0) == 16.0 / 20.0)     // a done field counts in full
     // All of field 2 → colour 0 complete.
     l.beginStroke(color: 0, radius: 0.75)
-    change = l.continueStroke([CGPoint(x: 11, y: 3), CGPoint(x: 13, y: 3), CGPoint(x: 13, y: 5), CGPoint(x: 11, y: 5)])
+    change = l.continueStroke([CGPoint(x: 11.5, y: 3.5), CGPoint(x: 13.5, y: 3.5), CGPoint(x: 13.5, y: 5.5),
+                               CGPoint(x: 11.5, y: 5.5)])
     _ = l.endStroke()
     #expect(change.completedFields == [2])
     #expect(change.completedColors == [0])
@@ -144,7 +148,7 @@ private func strokeAcross(_ l: PaintLayer, color: Int, y: CGFloat, radius: Doubl
     #expect(!l.isComplete)
     // Another colour over field 0 opens it again.
     l.beginStroke(color: 1, radius: 0.75)
-    _ = l.continueStroke([CGPoint(x: 1, y: 1)])
+    _ = l.continueStroke([CGPoint(x: 1.5, y: 1.5)])
     _ = l.endStroke()
     #expect(l.paintedOfField[0] == 14)
     #expect(!l.fieldComplete[0])
@@ -247,7 +251,7 @@ private func strokeAcross(_ l: PaintLayer, color: Int, y: CGFloat, radius: Doubl
     #expect(l.coverage.contains { $0 > 0 && $0 < 255 })
     let png = l.pngData()
     #expect(!png.isEmpty)
-    let back = PaintLayer(template: t, png: png)
+    let back = PaintLayer(template: t, png: png, colors: l.colorData())   // strokes crossed foreign fields
     #expect(back.coverage == l.coverage)
     #expect(back.paintedOfField == l.paintedOfField)
     #expect(back.fieldComplete == l.fieldComplete)
