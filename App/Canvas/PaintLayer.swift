@@ -34,6 +34,8 @@ enum BrushKind: String, CaseIterable, Codable, Sendable {
     case brush
     /// Grainy like a crayon on paper; pressing harder or going over it again fills the gaps.
     case crayon
+    /// A fine, hard tip like a pencil: a light touch draws a thin line, pressing harder a wider one.
+    case pencil
     /// Soft and see-through; strokes build up and glaze over other colours.
     case airbrush
     /// Darkens paint that is already there.
@@ -45,7 +47,10 @@ enum BrushKind: String, CaseIterable, Codable, Sendable {
 
     /// Soft tools reach a bit further than the brush size, so their faded edge does not make them
     /// look thinner.
-    fileprivate var radiusFactor: Double { self == .brush || self == .crayon ? 1 : 1.3 }
+    fileprivate var radiusFactor: Double { self == .brush || self == .crayon || self == .pencil ? 1 : 1.3 }
+
+    /// Lays down a solid shape: over paint of its own colour the larger coverage wins.
+    fileprivate var isOpaque: Bool { self == .brush || self == .pencil }
 }
 
 /// The paint bitmap and all progress bookkeeping, without any UIKit.
@@ -313,6 +318,9 @@ final class PaintLayer {
         switch kind {
         case .brush:
             return edge
+        case .pencil:
+            // The tip widens with pressure; thinner than a pixel, the line gets lighter instead.
+            return min(1, max(0, r * (0.3 + 0.7 * p) + 0.5 - d))
         case .crayon:
             guard edge > 0 else { return 0 }
             // Paper grain: harder pressure reaches deeper into it.
@@ -402,7 +410,7 @@ final class PaintLayer {
                             let before = Pixel(coverage: original[li], color: original[area + li], shade: original[2 * area + li],
                                                under: original[3 * area + li], mix: original[4 * area + li])
                             let next = kind.isShading ? Self.shade(before, amount: amount, darker: kind == .shadow)
-                                                      : Self.paint(color, amount: amount, over: before, opaque: kind == .brush)
+                                                      : Self.paint(color, amount: amount, over: before, opaque: kind.isOpaque)
                             let i = y * w + x
                             let now = Pixel(coverage: px[i], color: px[n + i], shade: px[2 * n + i],
                                             under: px[3 * n + i], mix: px[4 * n + i])

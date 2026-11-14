@@ -96,11 +96,14 @@ private struct PaintChrome: View {
     let onShowFinished: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Finished colours leave the bar unless asked for; the selected one stays until another is picked.
+    @AppStorage("paint.showDoneColors") private var showDone = false
+
     private var order: [Int] {
         let done = session.completedColors
-        return palette.indices.sorted { a, b in
-            (done.contains(a) ? 1 : 0, a) < (done.contains(b) ? 1 : 0, b)
-        }
+        return palette.indices
+            .filter { showDone || !done.contains($0) || $0 == session.selectedColor }
+            .sorted { a, b in (done.contains(a) ? 1 : 0, a) < (done.contains(b) ? 1 : 0, b) }
     }
 
     private var pots: some View {
@@ -111,6 +114,12 @@ private struct PaintChrome: View {
                          isDone: session.completedColors.contains(index),
                          isSelected: session.selectedColor == index) {
                     withAnimation(Theme.spring) { session.selectColor(index) }
+                }
+                .transition(.scale(scale: 0.4).combined(with: .opacity))
+            }
+            if !session.completedColors.isEmpty {
+                DoneToggle(count: session.completedColors.count, isShowing: showDone) {
+                    withAnimation(Theme.spring) { showDone.toggle() }
                 }
             }
         }
@@ -137,7 +146,7 @@ private struct PaintChrome: View {
                 if session.isComplete {
                     RoundButton(systemImage: "sparkles", label: "Fertiges Bild ansehen", action: onShowFinished)
                 }
-                BrushPicker(brush: $session.brush)
+                BrushSizeControl(diameter: $session.brushDiameter)
                 RoundButton(systemImage: "arrow.uturn.backward", label: "Rückgängig", action: onUndo)
                     .disabled(!session.canUndo)
                 RoundButton(systemImage: "arrow.up.left.and.arrow.down.right", label: "Ganzes Bild") {
@@ -181,29 +190,61 @@ struct RoundButton: View {
     }
 }
 
-private struct BrushPicker: View {
-    @Binding var brush: BrushSize
+/// Brush size from a hairline to a broad stroke, without steps. The dot shows the size on screen
+/// (up to its frame).
+private struct BrushSizeControl: View {
+    @Binding var diameter: CGFloat
 
-    private static var labels: [LocalizedStringKey] { ["Dünner Pinsel", "Mittlerer Pinsel", "Dicker Pinsel"] }
+    private static let range = PaintingSession.diameterRange
+    /// 0...1 along the slider; logarithmic so that the fine sizes get as much room as the broad ones.
+    private var position: Binding<Double> {
+        Binding(
+            get: { log(Double(diameter / Self.range.lowerBound)) / log(Double(Self.range.upperBound / Self.range.lowerBound)) },
+            set: { diameter = Self.range.lowerBound * CGFloat(pow(Double(Self.range.upperBound / Self.range.lowerBound), $0)) }
+        )
+    }
 
     var body: some View {
-        HStack(spacing: 2) {
-            ForEach(Array(BrushSize.allCases.enumerated()), id: \.offset) { i, size in
-                Button { withAnimation(Theme.spring) { brush = size } } label: {
-                    Circle()
-                        .fill(brush == size ? Color.accentColor : Theme.ink.opacity(0.55))
-                        .frame(width: CGFloat(8 + i * 6), height: CGFloat(8 + i * 6))
-                        .frame(width: 44, height: 44)
-                        .background(brush == size ? Color.accentColor.opacity(0.16) : .clear, in: Circle())
-                        .contentShape(Circle())
-                }
-                .buttonStyle(PressableStyle())
-                .accessibilityLabel(Self.labels[i])
-                .accessibilityAddTraits(brush == size ? .isSelected : [])
-            }
+        HStack(spacing: 10) {
+            Circle()
+                .fill(Color.accentColor)
+                .frame(width: min(diameter, 36), height: min(diameter, 36))
+                .frame(width: 36, height: 36)
+            Slider(value: position, in: 0...1)
+                .frame(width: 170)
+                .accessibilityLabel("Pinselgröße")
+                .accessibilityValue(Text(verbatim: "\(Int(diameter.rounded())) pt"))
         }
-        .padding(4)
+        .padding(.leading, 8).padding(.trailing, 16)
+        .frame(height: 52)
         .background(.ultraThinMaterial, in: Capsule())
+    }
+}
+
+/// At the end of the paint pots: how many colours are done; shows or hides them.
+private struct DoneToggle: View {
+    let count: Int
+    let isShowing: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: isShowing ? "eye.slash" : "checkmark")
+                    .font(.system(size: 15, weight: .heavy))
+                Text(verbatim: "\(count)").font(.system(size: 17, weight: .bold, design: .rounded)).monospacedDigit()
+            }
+            .foregroundStyle(Theme.ink.opacity(0.7))
+            .frame(minWidth: 60, minHeight: 60)
+            .padding(.horizontal, 4)
+            .background(Theme.ink.opacity(0.06), in: Capsule())
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressableStyle())
+        .accessibilityLabel(isShowing ? "Fertige Farben ausblenden" : "Fertige Farben zeigen")
+        .accessibilityValue(Text(verbatim: "\(count)"))
+        .accessibilityIdentifier("toggleDoneColors")
     }
 }
 
@@ -211,7 +252,7 @@ private struct BrushPicker: View {
 private struct ToolRail: View {
     @Binding var tool: BrushKind
 
-    private static let paint: [BrushKind] = [.brush, .crayon, .airbrush]
+    private static let paint: [BrushKind] = [.pencil, .brush, .crayon, .airbrush]
     private static let shading: [BrushKind] = [.shadow, .light]
 
     var body: some View {
@@ -244,8 +285,9 @@ private struct ToolRail: View {
 extension BrushKind {
     var symbol: String {
         switch self {
+        case .pencil: "pencil"
         case .brush: "paintbrush.pointed.fill"
-        case .crayon: "pencil.tip"
+        case .crayon: "scribble.variable"
         case .airbrush: "aqi.medium"
         case .shadow: "moon.fill"
         case .light: "sun.max.fill"
@@ -254,6 +296,7 @@ extension BrushKind {
 
     var label: LocalizedStringKey {
         switch self {
+        case .pencil: "Buntstift"
         case .brush: "Pinsel"
         case .crayon: "Kreide"
         case .airbrush: "Airbrush"

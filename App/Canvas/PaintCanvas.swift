@@ -280,7 +280,7 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
             rotationRecognizer.isEnabled = false
             freezeRunningAnimation()
         }
-        let radius = Double(session.brush.diameter / 2 / scrollView.zoomScale) * Double(PaintLayer.scale)
+        let radius = Double(session.brushDiameter / 2 / scrollView.zoomScale) * Double(PaintLayer.scale)
         session.beginStroke(radius: radius)
         strokeMoved(touch, event)
     }

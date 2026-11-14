@@ -182,7 +182,11 @@ struct PaintCanvas: UIViewRepresentable { let session: PaintingSession }
   noch nie ein Stift erkannt wurde, malt ein Finger (für Geräte ohne Stift und
   für App Review); sobald ein Stift malt, gilt Stift-malt/Finger-navigiert.
 - Coalesced + predicted touches für flüssige Linien; runde Kappen; Pinselgröße
-  in Bildschirmpunkten (bleibt beim Zoomen gleich groß auf dem Display).
+  in Bildschirmpunkten (bleibt beim Zoomen gleich groß auf dem Display),
+  stufenlos 1,5–80 pt per Regler, je Werkzeug gemerkt. Buntstift: feine harte
+  Spitze, die mit dem Stiftdruck breiter wird.
+- Fertige Farben verschwinden aus der Farbleiste (die gewählte bleibt, bis eine
+  andere gewählt wird); ein Knopf am Ende blendet sie wieder ein.
 - **Pencil-Doppeltipp / Squeeze** (`UIPencilInteraction`): Rückgängig.
 - **Fortschritt:** pro Feld zählen, wie viele Gitterpixel bemalt sind (Pixel gilt
   als bemalt, wenn die Farbebene an seiner Mitte deckt). Feld ≥ 95 % → Feld wird
