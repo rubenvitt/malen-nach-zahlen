@@ -52,3 +52,15 @@ import Testing
     #expect(image.size == CGSize(width: 400, height: 200))
     #expect(s.renderFinished(showLines: false, maxSide: 80).size == CGSize(width: 80, height: 40))
 }
+
+@MainActor @Test func pickingAColourEndsShading() {
+    let s = PaintingSession(template: canvasTestTemplate(), paintLayerPNG: nil)
+    s.tool = .crayon
+    s.tool = .shadow
+    s.selectColor(1)
+    #expect(s.tool == .crayon)
+    #expect(s.selectedColor == 1)
+    s.tool = .airbrush
+    s.selectColor(0)
+    #expect(s.tool == .airbrush)
+}

@@ -110,7 +110,7 @@ private struct PaintChrome: View {
                          progress: session.progressByColor.indices.contains(index) ? session.progressByColor[index] : 0,
                          isDone: session.completedColors.contains(index),
                          isSelected: session.selectedColor == index) {
-                    withAnimation(Theme.spring) { session.selectedColor = index }
+                    withAnimation(Theme.spring) { session.selectColor(index) }
                 }
             }
         }
@@ -155,8 +155,10 @@ private struct PaintChrome: View {
             .frame(maxWidth: 1000)
             .animation(reduceMotion ? nil : .spring(response: 0.5, dampingFraction: 0.7), value: order)
         }
+        .overlay(alignment: .leading) { ToolRail(tool: $session.tool) }
         .padding(.horizontal, 20).padding(.vertical, 16)
         .sensoryFeedback(.selection, trigger: session.selectedColor)
+        .sensoryFeedback(.selection, trigger: session.tool)
         .sensoryFeedback(.success, trigger: session.completedColors.count)
     }
 }
@@ -202,5 +204,61 @@ private struct BrushPicker: View {
         }
         .padding(4)
         .background(.ultraThinMaterial, in: Capsule())
+    }
+}
+
+/// Brush types and shading tools, in a column on the leading edge.
+private struct ToolRail: View {
+    @Binding var tool: BrushKind
+
+    private static let paint: [BrushKind] = [.brush, .crayon, .airbrush]
+    private static let shading: [BrushKind] = [.shadow, .light]
+
+    var body: some View {
+        VStack(spacing: 2) {
+            ForEach(Self.paint, id: \.self) { kind in button(kind) }
+            Capsule().fill(Theme.ink.opacity(0.15)).frame(width: 24, height: 2).padding(.vertical, 4)
+            ForEach(Self.shading, id: \.self) { kind in button(kind) }
+        }
+        .padding(4)
+        .background(.ultraThinMaterial, in: Capsule())
+        .foregroundStyle(Theme.ink)
+    }
+
+    private func button(_ kind: BrushKind) -> some View {
+        Button { withAnimation(Theme.spring) { tool = kind } } label: {
+            Image(systemName: kind.symbol)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(tool == kind ? Color.accentColor : Theme.ink.opacity(0.7))
+                .frame(width: 44, height: 44)
+                .background(tool == kind ? Color.accentColor.opacity(0.16) : .clear, in: Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(PressableStyle())
+        .accessibilityLabel(kind.label)
+        .accessibilityAddTraits(tool == kind ? .isSelected : [])
+        .accessibilityIdentifier("tool-\(kind.rawValue)")
+    }
+}
+
+extension BrushKind {
+    var symbol: String {
+        switch self {
+        case .brush: "paintbrush.pointed.fill"
+        case .crayon: "pencil.tip"
+        case .airbrush: "aqi.medium"
+        case .shadow: "moon.fill"
+        case .light: "sun.max.fill"
+        }
+    }
+
+    var label: LocalizedStringKey {
+        switch self {
+        case .brush: "Pinsel"
+        case .crayon: "Kreide"
+        case .airbrush: "Airbrush"
+        case .shadow: "Schatten"
+        case .light: "Licht"
+        }
     }
 }

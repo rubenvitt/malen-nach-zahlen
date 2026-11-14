@@ -267,3 +267,107 @@ private func strokeAcross(_ l: PaintLayer, color: Int, y: CGFloat, radius: Doubl
     let garbage = PaintLayer(template: canvasTestTemplate(), png: Data([1, 2, 3]))
     #expect(garbage.progress == 0)
 }
+
+// MARK: Mixing, brush types, shading
+
+@Test func otherColourOverPaintNeverLetsWhiteThrough() {
+    let l = PaintLayer(template: canvasTestTemplate())
+    _ = strokeAcross(l, color: 0, y: 4, radius: 6)                   // everything solid colour 0
+    #expect(l.coverage.allSatisfy { $0 == 255 })
+    l.beginStroke(color: 1, radius: 1.3)
+    _ = l.continueStroke([CGPoint(x: 2, y: 4), CGPoint(x: 14, y: 4)])
+    _ = l.endStroke()
+    // The soft edge of the new stroke used to replace solid paint with thin paint: a white seam.
+    #expect(l.coverage.allSatisfy { $0 == 255 })
+    let under = l.plane(.under), mix = l.plane(.mix)
+    let core = 3 * l.width + 8, edge = 2 * l.width + 8, outside = 1 * l.width + 8
+    #expect(l.paintColor[core] == 1 && mix[core] == 0)
+    // At the edge both colours blend; the stronger one (still the old) is the pixel's colour.
+    #expect(l.paintColor[edge] == 0 && under[edge] == 1 && mix[edge] > 0 && mix[edge] < 128)
+    #expect(l.paintColor[outside] == 0 && mix[outside] == 0)
+}
+
+@Test func shadingChangesOnlyTheShade() throws {
+    let l = PaintLayer(template: canvasTestTemplate())
+    l.beginStroke(color: 0, radius: 2, kind: .shadow)
+    _ = l.continueStroke([CGPoint(x: 2, y: 4), CGPoint(x: 14, y: 4)])
+    #expect(!l.endStroke().committed)                                 // bare paper: nothing to shade
+    _ = strokeAcross(l, color: 0, y: 4, radius: 6)
+    let coverage = l.coverage, colors = l.paintColor, painted = l.paintedOfField, progress = l.progress
+    l.beginStroke(color: 1, radius: 2, kind: .shadow)                 // the selected colour does not matter
+    _ = l.continueStroke([CGPoint(x: 2, y: 4), CGPoint(x: 14, y: 4)])
+    #expect(l.endStroke().committed)
+    let centre = 4 * l.width + 8
+    let dark = l.shade[centre]
+    #expect(dark < PaintLayer.neutralShade)
+    #expect(l.coverage == coverage && l.paintColor == colors)
+    #expect(l.paintedOfField == painted && l.progress == progress)
+
+    let image = try #require(l.makeImage(PixelRect(x0: 8, y0: 4, x1: 9, y1: 5)))
+    let bytes = try #require(image.dataProvider?.data.map { $0 as Data })
+    #expect(bytes[0] < 200 && bytes[3] == 255)                        // colour 0 is r = 200 unshaded
+
+    l.beginStroke(color: 0, radius: 2, kind: .light)
+    _ = l.continueStroke([CGPoint(x: 8, y: 4)], pressures: [1])
+    _ = l.endStroke()
+    #expect(l.shade[centre] > dark)
+    _ = l.undo()
+    #expect(l.shade[centre] == dark)
+    // Painting the colour on again with the brush wipes the shading off.
+    _ = strokeAcross(l, color: 0, y: 4, radius: 6)
+    #expect(l.shade.allSatisfy { $0 == PaintLayer.neutralShade })
+}
+
+@Test func crayonLeavesGrainAndFillsUpWhenGoneOverAgain() {
+    let l = PaintLayer(template: canvasTestTemplate())
+    func crayon() {
+        l.beginStroke(color: 0, radius: 6, kind: .crayon)
+        _ = l.continueStroke([CGPoint(x: 0, y: 4), CGPoint(x: 16, y: 4)], pressures: [0.6, 0.6])
+        _ = l.endStroke()
+    }
+    crayon()
+    let once = l.coverage
+    #expect(once.allSatisfy { $0 > 0 })
+    #expect(once.contains { $0 < 255 })
+    crayon()
+    #expect(zip(l.coverage, once).allSatisfy { $0 >= $1 })
+    #expect(zip(l.coverage, once).contains { $0 > $1 })
+}
+
+@Test func airbrushIsSeeThroughAndBuildsUp() {
+    let centre = 4 * 16 + 8
+    let l = PaintLayer(template: canvasTestTemplate())
+    func spray(_ layer: PaintLayer, _ color: Int) {
+        layer.beginStroke(color: color, radius: 3, kind: .airbrush)
+        _ = layer.continueStroke([CGPoint(x: 8, y: 4)])
+        _ = layer.endStroke()
+    }
+    spray(l, 0)
+    let once = l.coverage[centre]
+    #expect(once > 0 && once < 128)
+    spray(l, 0)
+    #expect(l.coverage[centre] > once)
+
+    // Over another colour it glazes: the old colour stays and the new one is mixed in.
+    let g = PaintLayer(template: canvasTestTemplate())
+    _ = strokeAcross(g, color: 0, y: 4, radius: 6)
+    spray(g, 1)
+    #expect(g.coverage[centre] == 255 && g.paintColor[centre] == 0)
+    #expect(g.plane(.under)[centre] == 1 && g.plane(.mix)[centre] > 0)
+}
+
+@Test func shadeAndMixSurviveSaving() throws {
+    let t = canvasTestTemplate()
+    let l = PaintLayer(template: t)
+    _ = strokeAcross(l, color: 0, y: 4, radius: 6)
+    l.beginStroke(color: 1, radius: 1.3)
+    _ = l.continueStroke([CGPoint(x: 2, y: 4), CGPoint(x: 14, y: 4)])
+    _ = l.endStroke()
+    l.beginStroke(color: 0, radius: 2, kind: .shadow)
+    _ = l.continueStroke([CGPoint(x: 4, y: 4)])
+    _ = l.endStroke()
+    let back = PaintLayer(template: t, png: l.pngData(), colors: try #require(l.colorData()))
+    for plane in PaintLayer.Plane.allCases { #expect(back.plane(plane) == l.plane(plane), "\(plane)") }
+    #expect(back.paintedOfField == l.paintedOfField)
+    #expect(back.progress == l.progress)
+}

@@ -265,15 +265,17 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
     }
 
     fileprivate func strokeMoved(_ touch: UITouch, _ event: UIEvent) {
-        let points = (event.coalescedTouches(for: touch) ?? [touch]).map(paintPoint)
+        let touches = event.coalescedTouches(for: touch) ?? [touch]
         let predicted = (event.predictedTouches(for: touch) ?? []).map(paintPoint)
-        if let dirty = session.continueStroke(points, predicted: predicted) { redraw(dirty) }
+        if let dirty = session.continueStroke(touches.map(paintPoint), pressures: touches.map(Self.pressure),
+                                              predicted: predicted) { redraw(dirty) }
     }
 
     fileprivate func strokeEnded(_ touch: UITouch?, _ event: UIEvent?) {
         if let touch, let event {
-            let points = (event.coalescedTouches(for: touch) ?? [touch]).map(paintPoint)
-            if let dirty = session.continueStroke(points, predicted: []) { redraw(dirty) }
+            let touches = event.coalescedTouches(for: touch) ?? [touch]
+            if let dirty = session.continueStroke(touches.map(paintPoint), pressures: touches.map(Self.pressure),
+                                                  predicted: []) { redraw(dirty) }
         }
         if let dirty = session.endStroke() { redraw(dirty) }
         enableScrolling()
@@ -289,6 +291,13 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
         scrollView.panGestureRecognizer.isEnabled = true
         scrollView.pinchGestureRecognizer?.isEnabled = true
         rotationRecognizer.isEnabled = true
+    }
+
+    /// Pencil force as 0.2...1: a light touch still leaves something, a firm one (about twice the
+    /// usual writing force) gives everything. Fingers have no force and always give everything.
+    private static func pressure(_ touch: UITouch) -> Double {
+        guard touch.type == .pencil, touch.maximumPossibleForce > 0 else { return 1 }
+        return min(1, 0.2 + 0.4 * Double(touch.force))
     }
 
     private func paintPoint(_ touch: UITouch) -> CGPoint {
