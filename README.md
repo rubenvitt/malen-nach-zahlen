@@ -1,6 +1,6 @@
 # Malen nach Zahlen
 
-iPad-App: Aus einem Foto wird eine Malvorlage – Felder mit dünnem schwarzem Rand und Nummern –, die man mit dem Apple Pencil richtig ausmalt statt anzutippen. Mit Übermalschutz (Standard, im Spiel umschaltbar) bleibt ein Strich in dem einen Feld der gewählten Nummer, in dem er ansetzt; ohne malt man frei über alles. Farbanzahl und Detailgrad stellt man beim Erstellen mit Live-Vorschau ein.
+iPad-App: Aus einem Foto wird eine Malvorlage – Felder mit dünnem schwarzem Rand und Nummern –, die man mit dem Apple Pencil richtig ausmalt statt anzutippen. Gemalt wird frei über alles, mit Pinsel, Kreide oder Airbrush; Schatten und Licht dunkeln vorhandene Farbe ab oder hellen sie auf, je nach Stiftdruck. Farbanzahl und Detailgrad stellt man beim Erstellen mit Live-Vorschau ein.
 
 Komplett kostenlos: 4 Motive und beliebig viele eigene Fotos, ohne In-App-Käufe, ohne Abo, ohne Werbung. Sprachen: Deutsch, Englisch, Französisch, Spanisch, Italienisch, Japanisch, Koreanisch, Niederländisch, Portugiesisch (Brasilien).
 

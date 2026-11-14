@@ -21,6 +21,17 @@ enum BrushSize: CaseIterable, Codable {
     let template: Template
     var selectedColor = 0
     var brush: BrushSize = .medium
+    /// Brush type or shading tool for the next stroke.
+    var tool: BrushKind {
+        get { currentTool }
+        set {
+            currentTool = newValue
+            if !newValue.isShading { lastPaintTool = newValue }
+        }
+    }
+    private var currentTool = BrushKind.brush
+    /// The paint tool to go back to when a colour is picked while shading.
+    private(set) var lastPaintTool = BrushKind.brush
     private(set) var progressByColor: [Double]
     private(set) var progress: Double = 0
     private(set) var completedColors: Set<Int> = []
@@ -53,6 +64,13 @@ enum BrushSize: CaseIterable, Codable {
         onStrokeEnded?()
     }
 
+    /// Picks a paint pot. Shading works on any colour, so picking one means painting again: a
+    /// shading tool hands over to the last paint tool.
+    func selectColor(_ index: Int) {
+        selectedColor = index
+        if tool.isShading { tool = lastPaintTool }
+    }
+
     /// Zooms out to show the whole picture ("Ganzes Bild").
     func showWholePicture() { canvasView?.zoomToFit(animated: true) }
 
@@ -60,8 +78,8 @@ enum BrushSize: CaseIterable, Codable {
     /// picture; use `renderFinished` for that. Round-trips exactly through `init`.
     func paintLayerPNG() -> Data { layer.pngData() }
 
-    /// Which colour the paint has, saved next to `paintLayerPNG()`. Nil while all paint has the
-    /// right colour.
+    /// Which colour the paint has, how it is shaded and mixed, saved next to `paintLayerPNG()`. Nil
+    /// while all paint has the right colour, unshaded and unmixed.
     func paintColorData() -> Data? { layer.colorData() }
 
     /// The picture as painted so far, on white. `showLines` adds borders and the numbers that are
@@ -90,11 +108,12 @@ enum BrushSize: CaseIterable, Codable {
     // MARK: Used by PaintCanvasView (points and radius in paint pixels)
 
     func beginStroke(radius: Double) {
-        layer.beginStroke(color: min(max(0, selectedColor), template.palette.count - 1), radius: radius)
+        layer.beginStroke(color: min(max(0, selectedColor), template.palette.count - 1), radius: radius, kind: tool)
     }
 
-    func continueStroke(_ points: [CGPoint], predicted: [CGPoint]) -> PixelRect? {
-        let change = layer.continueStroke(points, predicted: predicted)
+    /// `pressures` 0...1 per point (pencil force); empty means full pressure.
+    func continueStroke(_ points: [CGPoint], pressures: [Double] = [], predicted: [CGPoint]) -> PixelRect? {
+        let change = layer.continueStroke(points, pressures: pressures, predicted: predicted)
         let now = CACurrentMediaTime()
         // Rings move live, but at most ~10× per second so SwiftUI does not re-render at 120 Hz.
         if !change.completedFields.isEmpty || now - lastPublish > 0.1 { publish(); lastPublish = now }
