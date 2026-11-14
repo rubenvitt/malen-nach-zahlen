@@ -64,3 +64,18 @@ import Testing
     s.selectColor(0)
     #expect(s.tool == .airbrush)
 }
+
+@MainActor @Test func brushSizeIsStepless_perTool() {
+    let s = PaintingSession(template: canvasTestTemplate(), paintLayerPNG: nil)
+    s.tool = .pencil
+    s.brushDiameter = 2.7
+    #expect(s.brushDiameter == 2.7)
+    s.brushDiameter = 0.1                                            // clamped to the finest size
+    #expect(s.brushDiameter == PaintingSession.diameterRange.lowerBound)
+    s.tool = .airbrush
+    s.brushDiameter = 50
+    s.tool = .pencil
+    #expect(s.brushDiameter == PaintingSession.diameterRange.lowerBound)   // each tool keeps its own
+    s.brush = .large
+    #expect(s.brushDiameter == BrushSize.large.diameter && s.brush == .large)
+}

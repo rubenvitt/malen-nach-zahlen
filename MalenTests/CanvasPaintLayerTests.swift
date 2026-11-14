@@ -371,3 +371,18 @@ private func strokeAcross(_ l: PaintLayer, color: Int, y: CGFloat, radius: Doubl
     #expect(back.paintedOfField == l.paintedOfField)
     #expect(back.progress == l.progress)
 }
+
+@Test func pencilLineWidensWithPressure() {
+    func width(pressure: Double) -> Int {
+        let l = PaintLayer(template: canvasTestTemplate())
+        l.beginStroke(color: 0, radius: 3, kind: .pencil)
+        _ = l.continueStroke([CGPoint(x: 1, y: 4), CGPoint(x: 15, y: 4)], pressures: [pressure, pressure])
+        _ = l.endStroke()
+        // Covered pixels down the middle column.
+        return (0..<l.height).filter { l.coverage[$0 * l.width + 8] >= 128 }.count
+    }
+    let light = width(pressure: 0.2), firm = width(pressure: 1)
+    #expect(light >= 1)
+    #expect(firm > light)
+    #expect(firm <= 6)                                                // never wider than the size
+}

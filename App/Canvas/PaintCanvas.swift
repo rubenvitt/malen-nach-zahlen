@@ -13,8 +13,10 @@ struct PaintCanvas: UIViewRepresentable {
 /// Zoomable painting surface. Content coordinates are grid pixels (the content view is
 /// `template.width × template.height` points at zoom 1); the paint layer has 2 px per grid pixel.
 ///
-/// Layers, bottom to top: white + grey numbers (tiled, vector) → paint tiles → borders
-/// (tiled, vector). Tiled layers redraw at the current zoom, so numbers and lines stay crisp.
+/// Layers, bottom to top: white + grey numbers (tiled, vector) → paint tiles → sharp paint → borders
+/// (tiled, vector). Tiled layers redraw at the current zoom, so numbers and lines stay crisp. The
+/// paint tiles hold the paint layer's own pixels; zoomed in, sharp paint tiles cover the visible part
+/// with the paint drawn at screen resolution (`SharpPaint`), so brush edges stay crisp too.
 ///
 /// Input: the pencil paints, fingers pan (1), pinch and rotate (2). Until a pencil was ever seen, a
 /// single finger paints and panning needs two fingers.
@@ -27,6 +29,15 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
     private let scrollView = UIScrollView()
     private var content = UIView()
     private var paintTiles: [CALayer] = []
+    private let detailContainer = CALayer()
+    /// Output pixels per paint pixel of the sharp tiles; 1 = none, the paint tiles alone.
+    private var detailScale = 1
+    private var detailTiles: [Int: DetailTile] = [:]
+    /// Sharp tiles of the previous zoom, shown until the new ones are drawn.
+    private var retiredDetail: [CALayer] = []
+    private var detailJobs = 0
+    private static let detailTilePixels = 256        // output pixels per side of a sharp tile
+    private static let maxDetailScale = 8
     private let strokeRecognizer = StrokeRecognizer()
     private let rotationRecognizer = UIRotationGestureRecognizer()
     private var fitScale: CGFloat = 1
@@ -102,7 +113,11 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
                 paintTiles.append(tile)
             }
         }
-        for l in [numbers, paint, borders] {
+        detailTiles.values.forEach { $0.layer.removeFromSuperlayer() }
+        detailTiles = [:]
+        dropRetiredDetail()
+        detailScale = 1
+        for l in [numbers, paint, detailContainer, borders] {
             l.frame = content.bounds
             content.layer.addSublayer(l)
         }
@@ -134,6 +149,7 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
         }
         updateInputMode()   // the pinch recognizer exists only once zooming is configured
         if isAtFit { zoomToFit(animated: false) } else { centerContent() }
+        updateDetail()
     }
 
     /// Shows the whole picture, straightened.
@@ -145,6 +161,7 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
         let size = scrollView.bounds.size
         let w = CGFloat(session.template.width) * fitScale, h = CGFloat(session.template.height) * fitScale
         scrollView.setContentOffset(CGPoint(x: (w - size.width) / 2, y: (h - size.height) / 2), animated: animated)
+        if !animated { updateDetail() }
     }
 
     /// Centres small content in the scroll view (and so on screen). The scroll view is larger than
@@ -163,6 +180,9 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
 
     func viewForZooming(in scrollView: UIScrollView) -> UIView? { content }
     func scrollViewDidZoom(_ scrollView: UIScrollView) { centerContent() }
+    func scrollViewDidScroll(_ scrollView: UIScrollView) { updateDetail() }
+    func scrollViewDidEndZooming(_ scrollView: UIScrollView, with view: UIView?, atScale scale: CGFloat) { updateDetail() }
+    func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) { updateDetail() }
     func scrollViewWillBeginZooming(_ scrollView: UIScrollView, with view: UIView?) { isAtFit = false }
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) { isAtFit = false }
 
@@ -212,6 +232,7 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
         } else {
             apply()
         }
+        updateDetail()
     }
 
     /// Stops a running snap (or "Ganzes Bild") where it is on screen, so the paper does not move
@@ -259,7 +280,7 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
             rotationRecognizer.isEnabled = false
             freezeRunningAnimation()
         }
-        let radius = Double(session.brush.diameter / 2 / scrollView.zoomScale) * Double(PaintLayer.scale)
+        let radius = Double(session.brushDiameter / 2 / scrollView.zoomScale) * Double(PaintLayer.scale)
         session.beginStroke(radius: radius)
         strokeMoved(touch, event)
     }
@@ -331,7 +352,180 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
                 paintTiles[ty * perRow + tx].contents = layer.makeImage(r)
             }
         }
+        redrawDetail(dirty)
         CATransaction.commit()
+    }
+
+    // MARK: Sharp paint
+
+    var detailScaleForTesting: Int { detailScale }
+    var detailTileCountForTesting: Int { detailTiles.count }
+    var detailIsDrawnForTesting: Bool { detailTiles.values.allSatisfy { $0.job == 0 && $0.pixels != nil } }
+    func zoomForTesting(_ factor: CGFloat) {
+        isAtFit = false
+        scrollView.setZoomScale(fitScale * factor, animated: false)
+        updateDetail()
+    }
+
+    /// Output pixels per paint pixel for the current zoom: 1 (paint tiles alone) while a paint pixel
+    /// covers at most 2 screen pixels, then the power of two that leaves Core Animation at most 2× to
+    /// stretch.
+    private func wantedDetailScale() -> Int {
+        let m = scrollView.zoomScale * max(1, traitCollection.displayScale) / CGFloat(PaintLayer.scale)
+        guard m > 2 else { return 1 }
+        var s = 2
+        while CGFloat(2 * s) < m && s < Self.maxDetailScale { s *= 2 }
+        return s
+    }
+
+    /// Covers what is on screen (plus a margin) with sharp tiles at the zoom's scale and drops the
+    /// rest. Waits while a pinch is under way; the tiles of before just scale along until then.
+    func updateDetail() {
+        guard !scrollView.isZooming, !scrollView.isZoomBouncing, bounds.width > 0, bounds.height > 0 else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        let scale = wantedDetailScale()
+        if scale != detailScale {
+            retiredDetail += detailTiles.values.map { $0.layer }
+            detailTiles = [:]
+            detailScale = scale
+        }
+        guard detailScale > 1 else { dropRetiredDetail(); return }
+
+        let layer = session.layer, side = Self.detailTilePixels / detailScale, s = CGFloat(PaintLayer.scale)
+        let columns = (layer.width + side - 1) / side, rows = (layer.height + side - 1) / side
+        var seen = content.convert(bounds, from: self)        // grid units; bounding box when turned
+        seen = seen.insetBy(dx: -seen.width * 0.1, dy: -seen.height * 0.1)
+        let x0 = max(0, Int((seen.minX * s / CGFloat(side)).rounded(.down)))
+        let x1 = min(columns - 1, Int((seen.maxX * s / CGFloat(side)).rounded(.down)))
+        let y0 = max(0, Int((seen.minY * s / CGFloat(side)).rounded(.down)))
+        let y1 = min(rows - 1, Int((seen.maxY * s / CGFloat(side)).rounded(.down)))
+        var wanted = Set<Int>()
+        if x0 <= x1 && y0 <= y1 {
+            for ty in y0...y1 {
+                for tx in x0...x1 {
+                    let key = ty * columns + tx
+                    wanted.insert(key)
+                    guard detailTiles[key] == nil else { continue }
+                    let r = PixelRect(x0: tx * side, y0: ty * side,
+                                      x1: min(layer.width, tx * side + side), y1: min(layer.height, ty * side + side))
+                    let tile = DetailTile(rect: r)
+                    tile.layer.frame = CGRect(x: CGFloat(r.x0) / s, y: CGFloat(r.y0) / s,
+                                              width: CGFloat(r.x1 - r.x0) / s, height: CGFloat(r.y1 - r.y0) / s)
+                    detailContainer.addSublayer(tile.layer)
+                    detailTiles[key] = tile
+                    renderDetail(key, tile)
+                }
+            }
+        }
+        for (key, tile) in detailTiles where !wanted.contains(key) {
+            tile.layer.removeFromSuperlayer()
+            detailTiles[key] = nil
+        }
+        dropRetiredDetailIfDone()
+    }
+
+    /// Draws a whole sharp tile off the main thread. Until it is done the tile keeps what it shows.
+    private func renderDetail(_ key: Int, _ tile: DetailTile) {
+        detailJobs &+= 1
+        let job = detailJobs, rect = tile.rect, scale = detailScale
+        tile.job = job
+        tile.changedWhileRendering = nil
+        let window = session.layer.window(around: rect)
+        Task { @MainActor [weak self] in
+            let pixels = await Task.detached(priority: .userInitiated) {
+                SharpPaint.render(window, rect: rect, scale: scale)
+            }.value
+            self?.finishDetail(key, job: job, pixels: pixels)
+        }
+    }
+
+    private func finishDetail(_ key: Int, job: Int, pixels: PixelBuffer) {
+        guard let tile = detailTiles[key], tile.job == job else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        tile.job = 0
+        tile.pixels = pixels
+        if let changed = tile.changedWhileRendering {
+            tile.changedWhileRendering = nil
+            patchDetail(tile, changed)
+        }
+        tile.show()
+        dropRetiredDetailIfDone()
+        CATransaction.commit()
+    }
+
+    /// Redraws the part `r` (paint pixels, inside the tile) of a drawn tile.
+    private func patchDetail(_ tile: DetailTile, _ r: PixelRect) {
+        guard let shown = tile.pixels else { return }
+        let pixels = shown.copy()        // the old pixels may still be on screen
+        SharpPaint.render(session.layer.window(around: r), rect: r, scale: detailScale, into: pixels.bytes,
+                          outRect: tile.rect, outBytesPerRow: pixels.bytesPerRow)
+        tile.pixels = pixels
+    }
+
+    /// Brings the sharp tiles up to date with changed paint. Small changes (a stroke going on) are
+    /// drawn right away; large ones (undo) in the background.
+    private func redrawDetail(_ dirty: PixelRect) {
+        dropRetiredDetail()
+        // A sharp pixel depends on paint pixels up to 2 away.
+        let reach = dirty.insetBy(-2)
+        var budget = 2 * Self.detailTilePixels * Self.detailTilePixels
+        for (key, tile) in detailTiles {
+            let r = tile.rect.intersection(reach)
+            guard !r.isEmpty else { continue }
+            let cost = (r.x1 - r.x0) * (r.y1 - r.y0) * detailScale * detailScale
+            if tile.job != 0 {
+                tile.changedWhileRendering = r.union(tile.changedWhileRendering)
+                tile.layer.contents = nil            // the paint tiles underneath are up to date
+            } else if cost <= budget {
+                budget -= cost
+                patchDetail(tile, r)
+                tile.show()
+            } else {
+                renderDetail(key, tile)
+            }
+        }
+    }
+
+    private func dropRetiredDetailIfDone() {
+        if detailTiles.values.allSatisfy({ $0.job == 0 }) { dropRetiredDetail() }
+    }
+
+    private func dropRetiredDetail() {
+        retiredDetail.forEach { $0.removeFromSuperlayer() }
+        retiredDetail = []
+    }
+}
+
+private func releasePixelBuffer(_ info: UnsafeMutableRawPointer?, _ data: UnsafeRawPointer, _ size: Int) {
+    if let info { Unmanaged<PixelBuffer>.fromOpaque(info).release() }
+}
+
+/// A part of the paint drawn sharp at the zoom's scale (see `SharpPaint`).
+@MainActor private final class DetailTile {
+    let rect: PixelRect                      // paint pixels
+    let layer = CALayer()
+    /// What the tile shows, once drawn.
+    var pixels: PixelBuffer?
+    /// Non-zero while a full drawing runs in the background; its result counts only if this still matches.
+    var job = 0
+    /// Paint that changed while that drawing ran, to patch in when it arrives.
+    var changedWhileRendering: PixelRect?
+
+    init(rect: PixelRect) { self.rect = rect }
+
+    func show() {
+        guard let pixels else { layer.contents = nil; return }
+        // The image uses the buffer's memory directly and keeps the buffer alive.
+        let info = Unmanaged.passRetained(pixels).toOpaque()
+        guard let provider = CGDataProvider(dataInfo: info, data: pixels.bytes, size: pixels.count,
+                                            releaseData: releasePixelBuffer) else { return }
+        layer.contents = CGImage(width: pixels.width, height: pixels.height, bitsPerComponent: 8, bitsPerPixel: 32,
+                                 bytesPerRow: pixels.bytesPerRow, space: CGColorSpaceCreateDeviceRGB(),
+                                 bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                                 provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)
     }
 }
 

@@ -168,6 +168,10 @@ struct PaintCanvas: UIViewRepresentable { let session: PaintingSession }
 
 - **Ebenen:** Weiß + Nummern (grau) → Farbebene → Ränder (schwarz, 1 Bildschirm-
   pixel dünn wirkend, auch gezoomt scharf genug). Farbe deckt die Nummer.
+  Gezoomt (ein Farbpixel > 2 Bildschirmpixel) liegt über dem sichtbaren Teil
+  der Farbebene eine scharfe Fassung in Bildschirmauflösung (`SharpPaint`):
+  Pinselkanten und Farbgrenzen werden dort wieder eine Bildschirmpixel breit,
+  Airbrush, Lasuren und Schatten bleiben weich.
 - **Clipping:** Jeder Strich-Abschnitt wird mit der Maske der gewählten Farbe
   geclippt (`CGContext.clip(to:mask:)` o. ä.), Masken pro Farbe gecacht.
   Auflösung der Farbebene: Gitter × 2 (wie Prototyp), Ränder vektor- oder
@@ -178,7 +182,11 @@ struct PaintCanvas: UIViewRepresentable { let session: PaintingSession }
   noch nie ein Stift erkannt wurde, malt ein Finger (für Geräte ohne Stift und
   für App Review); sobald ein Stift malt, gilt Stift-malt/Finger-navigiert.
 - Coalesced + predicted touches für flüssige Linien; runde Kappen; Pinselgröße
-  in Bildschirmpunkten (bleibt beim Zoomen gleich groß auf dem Display).
+  in Bildschirmpunkten (bleibt beim Zoomen gleich groß auf dem Display),
+  stufenlos 1,5–80 pt per Regler, je Werkzeug gemerkt. Buntstift: feine harte
+  Spitze, die mit dem Stiftdruck breiter wird.
+- Fertige Farben verschwinden aus der Farbleiste (die gewählte bleibt, bis eine
+  andere gewählt wird); ein Knopf am Ende blendet sie wieder ein.
 - **Pencil-Doppeltipp / Squeeze** (`UIPencilInteraction`): Rückgängig.
 - **Fortschritt:** pro Feld zählen, wie viele Gitterpixel bemalt sind (Pixel gilt
   als bemalt, wenn die Farbebene an seiner Mitte deckt). Feld ≥ 95 % → Feld wird

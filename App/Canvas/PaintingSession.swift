@@ -20,7 +20,34 @@ enum BrushSize: CaseIterable, Codable {
 @MainActor @Observable final class PaintingSession {
     let template: Template
     var selectedColor = 0
-    var brush: BrushSize = .medium
+    /// The three fixed sizes of before; setting one sets `brushDiameter`.
+    var brush: BrushSize {
+        get { BrushSize.allCases.min { abs($0.diameter - brushDiameter) < abs($1.diameter - brushDiameter) } ?? .medium }
+        set { brushDiameter = newValue.diameter }
+    }
+    /// Brush diameter in screen points for the current tool, any value in `diameterRange`. Each tool
+    /// keeps its own size (a fine pencil, a broad airbrush), remembered across pictures.
+    var brushDiameter: CGFloat {
+        get { diameters[currentTool] ?? Self.defaultDiameter(currentTool) }
+        set {
+            let d = min(max(newValue, Self.diameterRange.lowerBound), Self.diameterRange.upperBound)
+            diameters[currentTool] = d
+            UserDefaults.standard.set(Double(d), forKey: Self.diameterKey(currentTool))
+        }
+    }
+    static let diameterRange: ClosedRange<CGFloat> = 1.5...80
+    private var diameters: [BrushKind: CGFloat] = Dictionary(uniqueKeysWithValues: BrushKind.allCases.compactMap { kind in
+        let saved = UserDefaults.standard.double(forKey: PaintingSession.diameterKey(kind))
+        return saved > 0 ? (kind, CGFloat(saved)) : nil
+    })
+    private nonisolated static func diameterKey(_ kind: BrushKind) -> String { "brush.diameter.\(kind.rawValue)" }
+    static func defaultDiameter(_ kind: BrushKind) -> CGFloat {
+        switch kind {
+        case .pencil: 4
+        case .brush, .crayon: 18
+        case .airbrush, .shadow, .light: 36
+        }
+    }
     /// Brush type or shading tool for the next stroke.
     var tool: BrushKind {
         get { currentTool }

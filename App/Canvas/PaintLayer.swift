@@ -13,6 +13,10 @@ struct PixelRect: Equatable, Sendable {
         if isEmpty { return o }
         return PixelRect(x0: min(x0, o.x0), y0: min(y0, o.y0), x1: max(x1, o.x1), y1: max(y1, o.y1))
     }
+    func intersection(_ o: PixelRect) -> PixelRect {
+        PixelRect(x0: max(x0, o.x0), y0: max(y0, o.y0), x1: min(x1, o.x1), y1: min(y1, o.y1))
+    }
+    func insetBy(_ d: Int) -> PixelRect { PixelRect(x0: x0 + d, y0: y0 + d, x1: x1 - d, y1: y1 - d) }
 }
 
 /// What one call into the stroke API changed.
@@ -30,6 +34,8 @@ enum BrushKind: String, CaseIterable, Codable, Sendable {
     case brush
     /// Grainy like a crayon on paper; pressing harder or going over it again fills the gaps.
     case crayon
+    /// A fine, hard tip like a pencil: a light touch draws a thin line, pressing harder a wider one.
+    case pencil
     /// Soft and see-through; strokes build up and glaze over other colours.
     case airbrush
     /// Darkens paint that is already there.
@@ -41,7 +47,10 @@ enum BrushKind: String, CaseIterable, Codable, Sendable {
 
     /// Soft tools reach a bit further than the brush size, so their faded edge does not make them
     /// look thinner.
-    fileprivate var radiusFactor: Double { self == .brush || self == .crayon ? 1 : 1.3 }
+    fileprivate var radiusFactor: Double { self == .brush || self == .crayon || self == .pencil ? 1 : 1.3 }
+
+    /// Lays down a solid shape: over paint of its own colour the larger coverage wins.
+    fileprivate var isOpaque: Bool { self == .brush || self == .pencil }
 }
 
 /// The paint bitmap and all progress bookkeeping, without any UIKit.
@@ -309,6 +318,9 @@ final class PaintLayer {
         switch kind {
         case .brush:
             return edge
+        case .pencil:
+            // The tip widens with pressure; thinner than a pixel, the line gets lighter instead.
+            return min(1, max(0, r * (0.3 + 0.7 * p) + 0.5 - d))
         case .crayon:
             guard edge > 0 else { return 0 }
             // Paper grain: harder pressure reaches deeper into it.
@@ -398,7 +410,7 @@ final class PaintLayer {
                             let before = Pixel(coverage: original[li], color: original[area + li], shade: original[2 * area + li],
                                                under: original[3 * area + li], mix: original[4 * area + li])
                             let next = kind.isShading ? Self.shade(before, amount: amount, darker: kind == .shadow)
-                                                      : Self.paint(color, amount: amount, over: before, opaque: kind == .brush)
+                                                      : Self.paint(color, amount: amount, over: before, opaque: kind.isOpaque)
                             let i = y * w + x
                             let now = Pixel(coverage: px[i], color: px[n + i], shade: px[2 * n + i],
                                             under: px[3 * n + i], mix: px[4 * n + i])
@@ -603,6 +615,13 @@ final class PaintLayer {
                        space: CGColorSpaceCreateDeviceRGB(),
                        bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
                        provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
+    }
+
+    /// Everything `SharpPaint.render` needs to draw `r` (paint pixels), copied.
+    func window(around r: PixelRect) -> PaintWindow {
+        let w = SharpPaint.windowRect(for: r, layerWidth: width, layerHeight: height)
+        return PaintWindow(rect: w, layerWidth: width, layerHeight: height, planes: copy(w),
+                           palette: template.palette.flatMap { [Float($0.r), Float($0.g), Float($0.b)] })
     }
 
     // MARK: PNG (8-bit grey coverage, not a viewable picture)
