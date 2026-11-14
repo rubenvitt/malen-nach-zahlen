@@ -13,6 +13,10 @@ struct PixelRect: Equatable, Sendable {
         if isEmpty { return o }
         return PixelRect(x0: min(x0, o.x0), y0: min(y0, o.y0), x1: max(x1, o.x1), y1: max(y1, o.y1))
     }
+    func intersection(_ o: PixelRect) -> PixelRect {
+        PixelRect(x0: max(x0, o.x0), y0: max(y0, o.y0), x1: min(x1, o.x1), y1: min(y1, o.y1))
+    }
+    func insetBy(_ d: Int) -> PixelRect { PixelRect(x0: x0 + d, y0: y0 + d, x1: x1 - d, y1: y1 - d) }
 }
 
 /// What one call into the stroke API changed.
@@ -603,6 +607,13 @@ final class PaintLayer {
                        space: CGColorSpaceCreateDeviceRGB(),
                        bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
                        provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
+    }
+
+    /// Everything `SharpPaint.render` needs to draw `r` (paint pixels), copied.
+    func window(around r: PixelRect) -> PaintWindow {
+        let w = SharpPaint.windowRect(for: r, layerWidth: width, layerHeight: height)
+        return PaintWindow(rect: w, layerWidth: width, layerHeight: height, planes: copy(w),
+                           palette: template.palette.flatMap { [Float($0.r), Float($0.g), Float($0.b)] })
     }
 
     // MARK: PNG (8-bit grey coverage, not a viewable picture)

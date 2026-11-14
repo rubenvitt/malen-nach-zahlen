@@ -168,6 +168,10 @@ struct PaintCanvas: UIViewRepresentable { let session: PaintingSession }
 
 - **Ebenen:** Weiß + Nummern (grau) → Farbebene → Ränder (schwarz, 1 Bildschirm-
   pixel dünn wirkend, auch gezoomt scharf genug). Farbe deckt die Nummer.
+  Gezoomt (ein Farbpixel > 2 Bildschirmpixel) liegt über dem sichtbaren Teil
+  der Farbebene eine scharfe Fassung in Bildschirmauflösung (`SharpPaint`):
+  Pinselkanten und Farbgrenzen werden dort wieder eine Bildschirmpixel breit,
+  Airbrush, Lasuren und Schatten bleiben weich.
 - **Clipping:** Jeder Strich-Abschnitt wird mit der Maske der gewählten Farbe
   geclippt (`CGContext.clip(to:mask:)` o. ä.), Masken pro Farbe gecacht.
   Auflösung der Farbebene: Gitter × 2 (wie Prototyp), Ränder vektor- oder
