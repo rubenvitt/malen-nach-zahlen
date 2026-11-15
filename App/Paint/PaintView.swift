@@ -64,7 +64,7 @@ struct PaintView: View {
         }
         #endif
         let session = PaintingSession(template: template, paintLayerPNG: paint,
-                                      paintColors: store.paintColorData(id))
+                                      paintColors: store.paintColorData(id), paintFine: store.paintFineData(id))
         let saver = Autosaver(id: id, store: store, session: session)
         session.onStrokeEnded = { [weak saver] in saver?.changed() }
         if let open = (0..<template.palette.count).first(where: { !session.completedColors.contains($0) }) {

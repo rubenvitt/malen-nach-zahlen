@@ -16,7 +16,8 @@ struct PaintCanvas: UIViewRepresentable {
 /// Layers, bottom to top: white + grey numbers (tiled, vector) → paint tiles → sharp paint → borders
 /// (tiled, vector). Tiled layers redraw at the current zoom, so numbers and lines stay crisp. The
 /// paint tiles hold the paint layer's own pixels; zoomed in, sharp paint tiles cover the visible part
-/// with the paint drawn at screen resolution (`SharpPaint`), so brush edges stay crisp too.
+/// with the paint drawn at screen resolution (`DetailWindow`): from the paint layer's fine tiles where
+/// strokes were painted close up, scaled up sharp (`SharpPaint`) elsewhere.
 ///
 /// Input: the pencil paints, fingers pan (1), pinch and rotate (2). Until a pencil was ever seen, a
 /// single finger paints and panning needs two fingers.
@@ -432,10 +433,10 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
         let job = detailJobs, rect = tile.rect, scale = detailScale
         tile.job = job
         tile.changedWhileRendering = nil
-        let window = session.layer.window(around: rect)
+        let window = session.layer.detailWindow(around: rect)
         Task { @MainActor [weak self] in
             let pixels = await Task.detached(priority: .userInitiated) {
-                SharpPaint.render(window, rect: rect, scale: scale)
+                window.render(rect: rect, scale: scale)
             }.value
             self?.finishDetail(key, job: job, pixels: pixels)
         }
@@ -460,8 +461,8 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
     private func patchDetail(_ tile: DetailTile, _ r: PixelRect) {
         guard let shown = tile.pixels else { return }
         let pixels = shown.copy()        // the old pixels may still be on screen
-        SharpPaint.render(session.layer.window(around: r), rect: r, scale: detailScale, into: pixels.bytes,
-                          outRect: tile.rect, outBytesPerRow: pixels.bytesPerRow)
+        session.layer.detailWindow(around: r, unpack: true)
+            .render(rect: r, scale: detailScale, into: pixels.bytes, outRect: tile.rect, outBytesPerRow: pixels.bytesPerRow)
         tile.pixels = pixels
     }
 

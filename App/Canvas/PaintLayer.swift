@@ -66,6 +66,14 @@ enum BrushKind: String, CaseIterable, Codable, Sendable {
 /// stroke (`strokeMask`), and the result is always mixed from what was there before the stroke. New
 /// paint lies *on top of* old paint and never makes it thinner, so no white seams show where colours
 /// meet.
+///
+/// Fine paint: the layer's own pixels are too coarse for strokes painted close up (a thin line is
+/// only a few paint pixels wide, its edge and the crayon's grain turn into blobs when zoomed in). So
+/// thin strokes are also drawn into *fine tiles*, `fineScale`× sharper per side, with the same planes
+/// and the same mixing. A fine tile starts as the paint layer scaled up (`SharpPaint.upscale`), so it
+/// shows what was there; from then on every stroke that touches it is drawn into it as well. The
+/// layer's own pixels stay in charge of progress, export and the picture zoomed out; zoomed in, the
+/// canvas draws from the fine tiles where they exist. Tiles not used for a while are kept packed.
 final class PaintLayer {
     /// Paint pixels per grid pixel (as in the web prototype).
     static let scale = 2
@@ -76,6 +84,13 @@ final class PaintLayer {
     static let maxUndoBytes = 160 << 20
     static let neutralShade: UInt8 = 128
     private static let covered: UInt8 = 128
+    /// Fine pixels per paint pixel and side.
+    static let fineScale = 4
+    /// Strokes with a smaller radius (paint pixels) start fine tiles where they go. Broader strokes
+    /// keep fine tiles up to date but start none: their edges are smooth enough scaled up.
+    static let fineRadius = 16.0
+    /// Fine tiles kept unpacked; the others are packed until needed again.
+    static let hotFineTiles = 48
 
     /// The planes of `pixels`, in this order, each `width × height` bytes.
     enum Plane: Int, CaseIterable { case coverage, color, shade, under, mix }
@@ -107,13 +122,33 @@ final class PaintLayer {
         /// Every plane of a tile as it was before the stroke.
         var tiles: [Int: [UInt8]] = [:]
         var fields: [Int32: (painted: Int32, complete: Bool)] = [:]
-        var bytes: Int { tiles.values.reduce(0) { $0 + $1.count } }
+        /// Fine tiles as they were before the stroke (packed), and the ones the stroke started.
+        var fine: [Int: Data] = [:]
+        var newFine: Set<Int> = []
+        var bytes: Int { tiles.values.reduce(0) { $0 + $1.count } + fine.values.reduce(0) { $0 + $1.count } }
     }
     private struct Preview {
         var rect: PixelRect
         var pixels: [UInt8]
-        var tiles: [Int: [UInt8]]
+        var snapshot: Snapshot
         var mask: [Int: [UInt8]]
+        var fine: [Int: FineTile]
+        var fineStroke: FineStroke
+    }
+    /// A fine tile: all planes, `fineScale`² times a tile's pixels. Outside a stroke `packed` is
+    /// always there; `raw` only while the tile is in use.
+    private struct FineTile {
+        var raw: [UInt8]?
+        var packed: Data?
+    }
+    /// What the running stroke knows about the fine tiles it touches.
+    private struct FineStroke {
+        /// The planes before the stroke, per tile.
+        var original: [Int: [UInt8]] = [:]
+        /// Strongest touch so far per fine pixel, per tile.
+        var mask: [Int: [UInt8]] = [:]
+        /// Tiles the stroke changed (to pack when it ends).
+        var changed: Set<Int> = []
     }
     private var undoStack: [Snapshot] = []
     private var undoBytes = 0
@@ -126,12 +161,19 @@ final class PaintLayer {
     private var lastPoint: CGPoint?
     private var lastPressure = 1.0
     private var preview: Preview?
+    private var strokeIsFine = false
+    /// Crayon grain size for the running stroke: thin strokes get finer grain.
+    private var grainScale = 1.0
+    private var fine: [Int: FineTile] = [:]
+    private var fineStroke = FineStroke()
+    private var fineUse: [Int: Int] = [:]
+    private var fineClock = 0
 
     var canUndo: Bool { !undoStack.isEmpty }
     var isStroking: Bool { stroke != nil }
 
     /// `colors` is what `colorData()` returned earlier; without it all paint has its template colour.
-    init(template: Template, png: Data? = nil, colors: Data? = nil) {
+    init(template: Template, png: Data? = nil, colors: Data? = nil, fine fineData: Data? = nil) {
         self.template = template
         width = template.width * Self.scale
         height = template.height * Self.scale
@@ -166,6 +208,7 @@ final class PaintLayer {
         if let png {
             if let colors { loadColors(colors) }
             load(png)
+            if let fineData { loadFine(fineData) }
         }
     }
 
@@ -213,6 +256,9 @@ final class PaintLayer {
         strokeColor = color
         strokeKind = kind
         strokeRadius = max(0.75, radius) * kind.radiusFactor
+        strokeIsFine = strokeRadius < Self.fineRadius
+        grainScale = min(1, max(0.25, strokeRadius / 8))
+        fineStroke = FineStroke()
         lastPoint = nil
         lastPressure = 1
     }
@@ -238,7 +284,8 @@ final class PaintLayer {
             // Back up the whole area first so the preview can be taken back byte-exactly.
             let bound = predicted.reduce(boundsOfSegment(a, a)) { $0.union(boundsOfSegment($1, $1)) }
             if !bound.isEmpty {
-                preview = Preview(rect: bound, pixels: copy(bound), tiles: stroke?.tiles ?? [:], mask: strokeMask)
+                preview = Preview(rect: bound, pixels: copy(bound), snapshot: stroke ?? Snapshot(), mask: strokeMask,
+                                  fine: fine, fineStroke: fineStroke)
                 var ignored = Set<Int32>()
                 for p in predicted {
                     _ = rasterize(from: a, to: p, pressure: (lastPressure, lastPressure), commit: false, touched: &ignored)
@@ -253,7 +300,8 @@ final class PaintLayer {
     /// Finishes the stroke (keeps what was painted) and pushes one undo step if anything changed.
     func endStroke() -> StrokeChange {
         var change = StrokeChange(dirty: clearPreview())
-        if let s = stroke, !s.tiles.isEmpty {
+        packFine()
+        if let s = stroke, !s.tiles.isEmpty || !s.fine.isEmpty || !s.newFine.isEmpty {
             undoStack.append(s)
             undoBytes += s.bytes
             while undoStack.count > Self.maxUndo || (undoBytes > Self.maxUndoBytes && undoStack.count > 1) {
@@ -263,7 +311,9 @@ final class PaintLayer {
         }
         stroke = nil
         strokeMask = [:]
+        fineStroke = FineStroke()
         lastPoint = nil
+        trimFine()
         return change
     }
 
@@ -273,6 +323,7 @@ final class PaintLayer {
         guard let s = stroke else { return dirty }
         stroke = nil
         strokeMask = [:]
+        fineStroke = FineStroke()
         lastPoint = nil
         return restore(s).union(dirty)
     }
@@ -294,6 +345,15 @@ final class PaintLayer {
             setPainted(Int(f), old.painted)
             setComplete(Int(f), old.complete)
         }
+        for (index, packed) in s.fine {
+            fine[index] = FineTile(raw: nil, packed: packed)
+            dirty = dirty.union(tileRect(index))
+        }
+        for index in s.newFine {
+            fine[index] = nil
+            fineUse[index] = nil
+            dirty = dirty.union(tileRect(index))
+        }
         return dirty
     }
 
@@ -313,7 +373,8 @@ final class PaintLayer {
     }
 
     /// How strongly a round-capped segment touches a pixel `distance` away from it (0...1).
-    static func touch(_ kind: BrushKind, distance d: Double, radius r: Double, pressure p: Double, x: Int, y: Int) -> Double {
+    /// `grain` is the paper grain under the pixel (`grain(u:v:)`), used by the crayon only.
+    static func touch(_ kind: BrushKind, distance d: Double, radius r: Double, pressure p: Double, grain: Double) -> Double {
         let edge = min(1, max(0, r + 0.5 - d))
         switch kind {
         case .brush:
@@ -324,7 +385,7 @@ final class PaintLayer {
         case .crayon:
             guard edge > 0 else { return 0 }
             // Paper grain: harder pressure reaches deeper into it.
-            let g = Double(grain[(y & (grainSize - 1)) * grainSize + (x & (grainSize - 1))]) + (p - 0.6) * 0.5
+            let g = grain + (p - 0.6) * 0.5
             return edge * (0.1 + 0.9 * smoothstep(0.12, 0.5, g))
         case .airbrush, .shadow, .light:
             let q = min(1, d / (r + 0.5)), bump = (1 - q * q) * (1 - q * q)
@@ -383,8 +444,18 @@ final class PaintLayer {
         let dx = Double(b.x) - ax, dy = Double(b.y) - ay
         let len2 = dx * dx + dy * dy
         let gw = template.width, color = UInt8(strokeColor), w = width, n = planeSize, kind = strokeKind
-        let t = Self.tileSize
+        let t = Self.tileSize, gs = grainScale
         var changed = false
+        // Fine tiles start from the paint as it was before the stroke, so set them up first.
+        var fineTiles: [Int] = [], fineStarted: [Int] = []
+        for ty in (box.y0 / t)...((box.y1 - 1) / t) {
+            for tx in (box.x0 / t)...((box.x1 - 1) / t) {
+                let index = ty * tilesPerRow + tx
+                guard strokeIsFine || fine[index] != nil else { continue }
+                if startFine(index) { fineStarted.append(index) }
+                fineTiles.append(index)
+            }
+        }
         for ty in (box.y0 / t)...((box.y1 - 1) / t) {
             for tx in (box.x0 / t)...((box.x1 - 1) / t) {
                 let index = ty * tilesPerRow + tx
@@ -402,8 +473,9 @@ final class PaintLayer {
                             u = min(1, max(0, u))
                             let ex = px0 - ax - u * dx, ey = py - ay - u * dy
                             let p = pressure.0 + (pressure.1 - pressure.0) * u
+                            let g = kind == .crayon ? Self.grain(u: Double(x) / gs, v: Double(y) / gs) : 0
                             let amount = UInt8(Self.touch(kind, distance: (ex * ex + ey * ey).squareRoot(), radius: r,
-                                                          pressure: p, x: x, y: y) * 255)
+                                                          pressure: p, grain: g) * 255)
                             let li = (y - tr.y0) * tw + (x - tr.x0)
                             guard amount > mask[li] else { continue }
                             mask[li] = amount
@@ -442,9 +514,273 @@ final class PaintLayer {
                 strokeMask[index] = mask
             }
         }
+        var fineChanged = Set<Int>()
+        for index in fineTiles where rasterizeFine(index, from: a, to: b, pressure: pressure) { fineChanged.insert(index) }
+        if commit {
+            for index in fineStarted where !fineChanged.contains(index) { unstartFine(index) }
+            fineStroke.changed.formUnion(fineChanged)
+        }
+        changed = changed || !fineChanged.isEmpty
         // Drop snapshots nobody needed, so strokes that change nothing leave no undo step.
         if commit && !changed { saved.forEach { stroke?.tiles[$0] = nil } }
         return changed ? box : nil
+    }
+
+    // MARK: Fine paint
+
+    var fineTileCount: Int { fine.count }
+
+    /// The fine pixels of tile `index`.
+    private func fineRect(_ index: Int) -> PixelRect {
+        let r = tileRect(index), f = Self.fineScale
+        return PixelRect(x0: r.x0 * f, y0: r.y0 * f, x1: r.x1 * f, y1: r.y1 * f)
+    }
+
+    /// The planes of a fine tile, unpacked (and kept unpacked for a while); nil if there is none or
+    /// it cannot be read.
+    private func fineRaw(_ index: Int) -> [UInt8]? {
+        guard let tile = fine[index] else { return nil }
+        fineClock += 1
+        fineUse[index] = fineClock
+        if let raw = tile.raw { return raw }
+        let r = fineRect(index), size = (r.x1 - r.x0) * (r.y1 - r.y0) * Self.planes
+        guard let packed = tile.packed, let raw = Self.unpack(packed, size: size) else {
+            fine[index] = nil
+            fineUse[index] = nil
+            return nil
+        }
+        fine[index]?.raw = raw
+        return raw
+    }
+
+    static func pack(_ raw: [UInt8]) -> Data {
+        (try? (Data(raw) as NSData).compressed(using: .lz4) as Data) ?? Data()
+    }
+
+    static func unpack(_ packed: Data, size: Int) -> [UInt8]? {
+        guard let data = try? (packed as NSData).decompressed(using: .lz4) as Data, data.count == size else { return nil }
+        return [UInt8](data)
+    }
+
+    /// Gets tile `index` ready for the running stroke: notes how it was and, if there is no fine tile
+    /// yet, starts one from the paint as it was before the stroke. Returns true the first time.
+    private func startFine(_ index: Int) -> Bool {
+        guard fineStroke.original[index] == nil, stroke != nil else { return false }
+        if let raw = fineRaw(index) {
+            fineStroke.original[index] = raw
+            stroke?.fine[index] = fine[index]?.packed ?? Self.pack(raw)
+            return true
+        }
+        let raw = upscaledTile(index)
+        fine[index] = FineTile(raw: raw, packed: nil)
+        fineClock += 1
+        fineUse[index] = fineClock
+        fineStroke.original[index] = raw
+        stroke?.newFine.insert(index)
+        return true
+    }
+
+    /// Takes back `startFine` for a tile the stroke did not change after all.
+    private func unstartFine(_ index: Int) {
+        fineStroke.original[index] = nil
+        fineStroke.mask[index] = nil
+        stroke?.fine[index] = nil
+        if stroke?.newFine.remove(index) != nil {
+            fine[index] = nil
+            fineUse[index] = nil
+        }
+    }
+
+    /// Tile `index` scaled up to a fine tile from the paint as it was before the stroke.
+    private func upscaledTile(_ index: Int) -> [UInt8] {
+        let fr = fineRect(index), area = (fr.x1 - fr.x0) * (fr.y1 - fr.y0)
+        var out = [UInt8](repeating: 0, count: area * Self.planes)
+        let base = baseWindow(SharpPaint.upscaleWindowRect(for: fr, factor: Self.fineScale,
+                                                           layerWidth: width, layerHeight: height),
+                              beforeStroke: true)
+        out.withUnsafeMutableBufferPointer { o in
+            SharpPaint.upscale(base, factor: Self.fineScale, rect: fr, into: o.baseAddress!, outRect: fr)
+        }
+        return out
+    }
+
+    /// A copy of the paint inside `r`; with `beforeStroke`, as it was before the running stroke.
+    private func baseWindow(_ r: PixelRect, beforeStroke: Bool) -> PaintWindow {
+        var planes = copy(r)
+        if beforeStroke, let tiles = stroke?.tiles, !tiles.isEmpty {
+            let t = Self.tileSize, rw = r.x1 - r.x0, rArea = rw * (r.y1 - r.y0)
+            for ty in (r.y0 / t)...((r.y1 - 1) / t) {
+                for tx in (r.x0 / t)...((r.x1 - 1) / t) {
+                    let index = ty * tilesPerRow + tx
+                    guard let saved = tiles[index] else { continue }
+                    let tr = tileRect(index), tw = tr.x1 - tr.x0, area = tw * (tr.y1 - tr.y0)
+                    let i = tr.intersection(r)
+                    for p in 0..<Self.planes {
+                        for y in i.y0..<i.y1 {
+                            let from = p * area + (y - tr.y0) * tw + (i.x0 - tr.x0)
+                            let to = p * rArea + (y - r.y0) * rw + (i.x0 - r.x0)
+                            planes.replaceSubrange(to..<(to + i.x1 - i.x0), with: saved[from..<(from + i.x1 - i.x0)])
+                        }
+                    }
+                }
+            }
+        }
+        return PaintWindow(rect: r, layerWidth: width, layerHeight: height, planes: planes, palette: paletteFloats)
+    }
+
+    private lazy var paletteFloats: [Float] = template.palette.flatMap { [Float($0.r), Float($0.g), Float($0.b)] }
+
+    /// The segment from `a` to `b` (paint pixels) drawn into fine tile `index`, as `rasterize` draws
+    /// it into the paint pixels. Returns true if anything changed.
+    private func rasterizeFine(_ index: Int, from a: CGPoint, to b: CGPoint, pressure: (Double, Double)) -> Bool {
+        guard let original = fineStroke.original[index], fine[index]?.raw != nil,
+              var tile = fine.removeValue(forKey: index), var raw = tile.raw else { return false }
+        tile.raw = nil                      // keeps `raw` the only owner while it changes
+        let f = Double(Self.fineScale), fr = fineRect(index), fw = fr.x1 - fr.x0, area = fw * (fr.y1 - fr.y0)
+        let r = strokeRadius * f, ax = Double(a.x) * f, ay = Double(a.y) * f
+        let dx = Double(b.x) * f - ax, dy = Double(b.y) * f - ay
+        let len2 = dx * dx + dy * dy
+        let box = PixelRect(x0: max(fr.x0, Int((min(ax, ax + dx) - r - 1).rounded(.down))),
+                            y0: max(fr.y0, Int((min(ay, ay + dy) - r - 1).rounded(.down))),
+                            x1: min(fr.x1, Int((max(ax, ax + dx) + r + 1).rounded(.up))),
+                            y1: min(fr.y1, Int((max(ay, ay + dy) + r + 1).rounded(.up))))
+        var changed = false
+        if !box.isEmpty {
+            var mask = fineStroke.mask.removeValue(forKey: index) ?? [UInt8](repeating: 0, count: area)
+            let color = UInt8(strokeColor), kind = strokeKind, gs = grainScale
+            raw.withUnsafeMutableBufferPointer { px in
+                for y in box.y0..<box.y1 {
+                    let py = Double(y) + 0.5, gv = (py / f - 0.5) / gs
+                    for x in box.x0..<box.x1 {
+                        let px0 = Double(x) + 0.5
+                        var u = len2 > 0 ? ((px0 - ax) * dx + (py - ay) * dy) / len2 : 0
+                        u = min(1, max(0, u))
+                        let ex = px0 - ax - u * dx, ey = py - ay - u * dy
+                        let p = pressure.0 + (pressure.1 - pressure.0) * u
+                        let g = kind == .crayon ? Self.grain(u: (px0 / f - 0.5) / gs, v: gv) : 0
+                        let amount = UInt8(Self.touch(kind, distance: (ex * ex + ey * ey).squareRoot(), radius: r,
+                                                      pressure: p, grain: g) * 255)
+                        let li = (y - fr.y0) * fw + (x - fr.x0)
+                        guard amount > mask[li] else { continue }
+                        mask[li] = amount
+                        let before = Pixel(coverage: original[li], color: original[area + li], shade: original[2 * area + li],
+                                           under: original[3 * area + li], mix: original[4 * area + li])
+                        let next = kind.isShading ? Self.shade(before, amount: amount, darker: kind == .shadow)
+                                                  : Self.paint(color, amount: amount, over: before, opaque: kind.isOpaque)
+                        let now = Pixel(coverage: px[li], color: px[area + li], shade: px[2 * area + li],
+                                        under: px[3 * area + li], mix: px[4 * area + li])
+                        guard next != now else { continue }
+                        px[li] = next.coverage
+                        px[area + li] = next.color
+                        px[2 * area + li] = next.shade
+                        px[3 * area + li] = next.under
+                        px[4 * area + li] = next.mix
+                        changed = true
+                    }
+                }
+            }
+            fineStroke.mask[index] = mask
+        }
+        tile.raw = raw
+        if changed { tile.packed = nil }
+        fine[index] = tile
+        return changed
+    }
+
+    /// Packs the fine tiles the stroke changed, so they can be saved and undone.
+    private func packFine() {
+        for index in fineStroke.changed {
+            guard let raw = fine[index]?.raw else { continue }
+            fine[index]?.packed = Self.pack(raw)
+        }
+        fineStroke.changed = []
+    }
+
+    /// Keeps at most `hotFineTiles` fine tiles unpacked, the ones used last.
+    private func trimFine() {
+        let hot = fine.filter { $0.value.raw != nil && $0.value.packed != nil && fineStroke.original[$0.key] == nil }
+        guard hot.count > Self.hotFineTiles else { return }
+        let cold = hot.keys.sorted { (fineUse[$0] ?? 0) < (fineUse[$1] ?? 0) }.prefix(hot.count - Self.hotFineTiles)
+        for index in cold { fine[index]?.raw = nil }
+    }
+
+    /// Everything needed to draw `r` (paint pixels) sharp at any zoom, off the main thread. With
+    /// `unpack`, packed fine tiles are unpacked here and stay so (for many small redraws in a row).
+    func detailWindow(around r: PixelRect, unpack: Bool = false) -> DetailWindow {
+        let base = window(around: r.insetBy(-1))
+        var tiles: [Int: DetailWindow.Source] = [:]
+        if !fine.isEmpty {
+            let f = Self.fineScale, t = Self.tileSize, m = (2 + f - 1) / f
+            let reach = PixelRect(x0: max(0, r.x0 - m), y0: max(0, r.y0 - m), x1: min(width, r.x1 + m), y1: min(height, r.y1 + m))
+            if !reach.isEmpty {
+                for ty in (reach.y0 / t)...((reach.y1 - 1) / t) {
+                    for tx in (reach.x0 / t)...((reach.x1 - 1) / t) {
+                        let index = ty * tilesPerRow + tx
+                        guard let tile = fine[index] else { continue }
+                        if let raw = unpack ? fineRaw(index) : tile.raw {
+                            tiles[index] = .raw(raw)
+                        } else if let packed = tile.packed {
+                            tiles[index] = .packed(packed)
+                        }
+                    }
+                }
+            }
+            if unpack { trimFine() }
+        }
+        return DetailWindow(base: base, fine: tiles, tileSize: Self.tileSize, tilesPerRow: tilesPerRow,
+                            fineScale: Self.fineScale, planes: Self.planes)
+    }
+
+    /// All fine tiles for saving next to the paint, or nil if there are none. Only between strokes.
+    func fineData() -> Data? {
+        guard !fine.isEmpty else { return nil }
+        var out = Self.fineMagic
+        func put(_ v: Int) { withUnsafeBytes(of: UInt32(v).littleEndian) { out.append(contentsOf: $0) } }
+        // Never with the prediction preview.
+        let tiles = preview?.fine ?? fine
+        put(width); put(height); put(tiles.count)
+        for index in tiles.keys.sorted() {
+            guard let tile = tiles[index] else { continue }
+            let packed = tile.packed ?? tile.raw.map(Self.pack) ?? Data()
+            put(index); put(packed.count)
+            out.append(packed)
+        }
+        return out
+    }
+
+    private static let fineMagic = Data("MNZFINv1".utf8)
+
+    /// Accepts only data made for a layer of this size; tiles that turn out unreadable are dropped
+    /// when first needed.
+    private func loadFine(_ data: Data) {
+        let bytes = [UInt8](data), m = Self.fineMagic.count
+        var at = m
+        func get() -> Int? {
+            guard at + 4 <= bytes.count else { return nil }
+            defer { at += 4 }
+            return (0..<4).reduce(0) { $0 | Int(bytes[at + $1]) << (8 * $1) }
+        }
+        guard bytes.count >= m, Data(bytes[0..<m]) == Self.fineMagic, get() == width, get() == height,
+              let count = get() else { return }
+        let tiles = tilesPerRow * ((height + Self.tileSize - 1) / Self.tileSize)
+        var loaded: [Int: FineTile] = [:]
+        for _ in 0..<count {
+            guard let index = get(), let length = get(), index < tiles, at + length <= bytes.count else { return }
+            loaded[index] = FineTile(raw: nil, packed: Data(bytes[at..<(at + length)]))
+            at += length
+        }
+        fine = loaded
+    }
+
+    /// Paper grain at `u`, `v` (in grain pixels; whole numbers hit them exactly), 0...1.
+    static func grain(u: Double, v: Double) -> Double {
+        let n = grainSize, x0 = Int(u.rounded(.down)), y0 = Int(v.rounded(.down))
+        let fx = u - Double(x0), fy = v - Double(y0)
+        @inline(__always) func at(_ x: Int, _ y: Int) -> Double { Double(grainTable[(y & (n - 1)) * n + (x & (n - 1))]) }
+        let top = fx == 0 ? at(x0, y0) : at(x0, y0) * (1 - fx) + at(x0 + 1, y0) * fx
+        guard fy != 0 else { return top }
+        let bottom = fx == 0 ? at(x0, y0 + 1) : at(x0, y0 + 1) * (1 - fx) + at(x0 + 1, y0 + 1) * fx
+        return top * (1 - fy) + bottom * fy
     }
 
     private static func smoothstep(_ e0: Double, _ e1: Double, _ x: Double) -> Double {
@@ -455,7 +791,7 @@ final class PaintLayer {
     /// Paper grain for the crayon, tiled over the picture: soft blobs plus fine speckle, evened out
     /// so that a threshold of 0.3 means "30 % of the paper".
     private static let grainSize = 128
-    private static let grain: [Float] = {
+    private static let grainTable: [Float] = {
         let n = grainSize, cell = 4, cells = n / cell
         func hash(_ x: Int, _ y: Int) -> Float {
             var h = UInt32(truncatingIfNeeded: x &* 374_761_393 &+ y &* 668_265_263)
@@ -557,8 +893,10 @@ final class PaintLayer {
     private func clearPreview() -> PixelRect? {
         guard let p = preview else { return nil }
         paste(p.pixels, into: p.rect)
-        stroke?.tiles = p.tiles
+        stroke = p.snapshot
         strokeMask = p.mask
+        fine = p.fine
+        fineStroke = p.fineStroke
         preview = nil
         return p.rect
     }
