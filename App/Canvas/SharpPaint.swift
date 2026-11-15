@@ -71,17 +71,14 @@ enum SharpPaint {
         return v + (lo + range * t - v) * strength
     }
 
-    /// Renders paint pixels `rect` at `scale` output pixels per paint pixel into `out`, which shows
-    /// `outRect` (paint pixels, containing `rect`) with `outBytesPerRow`. Premultiplied RGBA.
-    /// `window` must contain `windowRect(for: rect, …)`.
-    static func render(_ window: PaintWindow, rect: PixelRect, scale: Int, into out: UnsafeMutablePointer<UInt8>,
-                       outRect: PixelRect, outBytesPerRow: Int) {
-        let win = window.rect, ww = win.x1 - win.x0, wh = win.y1 - win.y0
-        guard !rect.isEmpty, ww > 0, wh > 0, scale > 0 else { return }
-        let n = ww * wh
+    /// Per window pixel: premultiplied RGBA exactly as `PaintLayer.makeImage` has it, coverage, and
+    /// the lowest and highest coverage around it.
+    private struct Prepared {
+        var packed: [UInt32], cover: [Float], lo: [Float], hi: [Float]
+    }
 
-        // Per window pixel: premultiplied RGBA exactly as PaintLayer.makeImage has it, coverage, and
-        // the lowest and highest coverage around it.
+    private static func prepare(_ window: PaintWindow) -> Prepared {
+        let ww = window.rect.x1 - window.rect.x0, wh = window.rect.y1 - window.rect.y0, n = ww * wh
         var packed = [UInt32](repeating: 0, count: n)
         var cover = [Float](repeating: 0, count: n), lo = cover, hi = cover
         window.planes.withUnsafeBufferPointer { px in
@@ -120,22 +117,57 @@ enum SharpPaint {
                     lo[y * ww + x] = l; hi[y * ww + x] = h
                 }
             }
+        }}}}}}
+        return Prepared(packed: packed, cover: cover, lo: lo, hi: hi)
+    }
 
-            // Where each output column and row samples: window column/row of the two neighbours and
-            // the fraction between them. Samples beyond the layer's edge repeat the edge.
-            let sc = Float(scale)
-            func axis(_ from: Int, _ to: Int, origin: Int, winOrigin: Int, winSize: Int, layer: Int) -> [(Int, Int, Float)] {
-                (from..<to).map { o in
-                    let p = Float(origin) + (Float(o) + 0.5) / sc - 0.5
-                    let i = Int(p.rounded(.down)), f = p - Float(i)
-                    let a = min(max(i, 0), layer - 1) - winOrigin, b = min(max(i + 1, 0), layer - 1) - winOrigin
-                    return (min(max(a, 0), winSize - 1), min(max(b, 0), winSize - 1), f)
+    /// Where output pixels `range` (counted from 0 at the layer's edge, `scale` per paint pixel)
+    /// sample: window column/row of the two neighbours and the fraction between them. Samples beyond
+    /// the layer's edge repeat the edge.
+    private static func samples(_ range: Range<Int>, scale: Int, winOrigin: Int, winSize: Int,
+                                layer: Int) -> [(Int, Int, Float)] {
+        let sc = Float(scale)
+        return range.map { o in
+            let p = (Float(o) + 0.5) / sc - 0.5
+            let i = Int(p.rounded(.down)), f = p - Float(i)
+            let a = min(max(i, 0), layer - 1) - winOrigin, b = min(max(i + 1, 0), layer - 1) - winOrigin
+            return (min(max(a, 0), winSize - 1), min(max(b, 0), winSize - 1), f)
+        }
+    }
+
+    /// Renders paint pixels `rect` at `scale` output pixels per paint pixel into `out`, which shows
+    /// `outRect` (paint pixels, containing `rect`) with `outBytesPerRow`. Premultiplied RGBA.
+    /// `window` must contain `windowRect(for: rect, …)`.
+    static func render(_ window: PaintWindow, rect: PixelRect, scale: Int, into out: UnsafeMutablePointer<UInt8>,
+                       outRect: PixelRect, outBytesPerRow: Int) {
+        let win = window.rect, ww = win.x1 - win.x0, wh = win.y1 - win.y0
+        guard !rect.isEmpty, ww > 0, wh > 0, scale > 0 else { return }
+        let n = ww * wh
+        let prepared = prepare(window)
+        if scale == 1 {
+            // Pixel for pixel: exactly the paint layer's own pixels.
+            for y in rect.y0..<rect.y1 {
+                let line = out + (y - outRect.y0) * outBytesPerRow + (rect.x0 - outRect.x0) * 4
+                for x in rect.x0..<rect.x1 {
+                    let p = prepared.packed[(y - win.y0) * ww + (x - win.x0)], o = line + (x - rect.x0) * 4
+                    o[0] = UInt8(truncatingIfNeeded: p); o[1] = UInt8(truncatingIfNeeded: p >> 8)
+                    o[2] = UInt8(truncatingIfNeeded: p >> 16); o[3] = UInt8(truncatingIfNeeded: p >> 24)
                 }
             }
-            let ox0 = (rect.x0 - outRect.x0) * scale, ox1 = (rect.x1 - outRect.x0) * scale
-            let oy0 = (rect.y0 - outRect.y0) * scale, oy1 = (rect.y1 - outRect.y0) * scale
-            let cols = axis(ox0, ox1, origin: outRect.x0, winOrigin: win.x0, winSize: ww, layer: window.layerWidth)
-            let rows = axis(oy0, oy1, origin: outRect.y0, winOrigin: win.y0, winSize: wh, layer: window.layerHeight)
+            return
+        }
+        window.planes.withUnsafeBufferPointer { px in
+        window.palette.withUnsafeBufferPointer { palette in
+        prepared.packed.withUnsafeBufferPointer { packed in
+        prepared.cover.withUnsafeBufferPointer { cover in
+        prepared.lo.withUnsafeBufferPointer { lo in
+        prepared.hi.withUnsafeBufferPointer { hi in
+            let sc = Float(scale)
+            let cols = samples((rect.x0 * scale)..<(rect.x1 * scale), scale: scale, winOrigin: win.x0, winSize: ww,
+                               layer: window.layerWidth)
+            let rows = samples((rect.y0 * scale)..<(rect.y1 * scale), scale: scale, winOrigin: win.y0, winSize: wh,
+                               layer: window.layerHeight)
+            let ox0 = (rect.x0 - outRect.x0) * scale, oy0 = (rect.y0 - outRect.y0) * scale
 
             for ry in 0..<rows.count {
                 let row = rows[ry], r0 = row.0 * ww, r1 = row.1 * ww, fy = row.2
@@ -204,6 +236,137 @@ enum SharpPaint {
         }}}}}}
     }
 
+    /// The paint pixels `upscale` needs to fill fine pixels `rect`.
+    static func upscaleWindowRect(for rect: PixelRect, factor: Int, layerWidth: Int, layerHeight: Int) -> PixelRect {
+        let r = PixelRect(x0: rect.x0 / factor, y0: rect.y0 / factor,
+                          x1: (rect.x1 + factor - 1) / factor, y1: (rect.y1 + factor - 1) / factor)
+        return windowRect(for: r, layerWidth: layerWidth, layerHeight: layerHeight)
+    }
+
+    /// The paint scaled up by `factor` into plain paint planes (as `PaintLayer.Plane`), with edges as
+    /// sharp as `render` draws them: fills fine pixels `rect` of `out`, which holds the planes of
+    /// `outRect` (fine pixels, containing `rect`) back to back. `window` must contain
+    /// `upscaleWindowRect(for: rect, …)`.
+    ///
+    /// Each fine pixel gets the colour that weighs most around it and, where two colours meet, the
+    /// other one as `under` with its share as `mix`; coverage and shade are interpolated.
+    static func upscale(_ window: PaintWindow, factor: Int, rect: PixelRect, into out: UnsafeMutablePointer<UInt8>,
+                        outRect: PixelRect) {
+        let win = window.rect, ww = win.x1 - win.x0, wh = win.y1 - win.y0
+        guard !rect.isEmpty, ww > 0, wh > 0, factor > 0 else { return }
+        let n = ww * wh, ow = outRect.x1 - outRect.x0, on = ow * (outRect.y1 - outRect.y0)
+        let prepared = prepare(window)
+        // All five planes of a window pixel in one word, to spot even areas quickly.
+        var keys = [UInt64](repeating: 0, count: n)
+        window.planes.withUnsafeBufferPointer { px in
+            for i in 0..<n {
+                keys[i] = UInt64(px[i]) | UInt64(px[n + i]) << 8 | UInt64(px[2 * n + i]) << 16
+                    | UInt64(px[3 * n + i]) << 24 | UInt64(px[4 * n + i]) << 32
+            }
+        }
+        let cols = samples(rect.x0..<rect.x1, scale: factor, winOrigin: win.x0, winSize: ww, layer: window.layerWidth)
+        let rows = samples(rect.y0..<rect.y1, scale: factor, winOrigin: win.y0, winSize: wh, layer: window.layerHeight)
+        let sc = Float(factor)
+        window.planes.withUnsafeBufferPointer { px in
+        keys.withUnsafeBufferPointer { keys in
+        prepared.cover.withUnsafeBufferPointer { cover in
+        prepared.lo.withUnsafeBufferPointer { lo in
+        prepared.hi.withUnsafeBufferPointer { hi in
+            for ry in 0..<rows.count {
+                let row = rows[ry], r0 = row.0 * ww, r1 = row.1 * ww, fy = row.2
+                let line = (rect.y0 + ry - outRect.y0) * ow + (rect.x0 - outRect.x0)
+                for rx in 0..<cols.count {
+                    let col = cols[rx], o = line + rx
+                    let i0 = r0 + col.0, i1 = r0 + col.1, i2 = r1 + col.0, i3 = r1 + col.1
+                    let k0 = keys[i0]
+                    if k0 == keys[i1] && k0 == keys[i2] && k0 == keys[i3] {
+                        for p in 0..<5 { out[p * on + o] = px[p * n + i0] }
+                        continue
+                    }
+                    let fx = col.2
+                    let w0 = (1 - fx) * (1 - fy), w1 = fx * (1 - fy), w2 = (1 - fx) * fy, w3 = fx * fy
+                    let a0 = cover[i0], a1 = cover[i1], a2 = cover[i2], a3 = cover[i3]
+                    let av = w0 * a0 + w1 * a1 + w2 * a2 + w3 * a3
+                    let gx = (a1 - a0) * (1 - fy) + (a3 - a2) * fy
+                    let gy = (a2 - a0) * (1 - fx) + (a3 - a1) * fx
+                    let lv = w0 * lo[i0] + w1 * lo[i1] + w2 * lo[i2] + w3 * lo[i3]
+                    let hv = w0 * hi[i0] + w1 * hi[i1] + w2 * hi[i2] + w3 * hi[i3]
+                    let alpha = sharpen(av, gradient: (gx * gx + gy * gy).squareRoot(), lo: lv, hi: hv, scale: sc,
+                                        strength: smoothstep(0.3, 0.55, hv - lv))
+                    let near = fx < 0.5 ? (fy < 0.5 ? i0 : i2) : (fy < 0.5 ? i1 : i3)
+                    let coverage = UInt8(min(255, max(0, alpha * 255 + 0.5)))
+                    guard coverage > 0, av > 0 else {
+                        out[o] = 0
+                        out[on + o] = px[n + near]
+                        out[2 * on + o] = PaintLayer.neutralShade
+                        out[3 * on + o] = px[n + near]
+                        out[4 * on + o] = 0
+                        continue
+                    }
+                    let wa0 = w0 * a0, wa1 = w1 * a1, wa2 = w2 * a2, wa3 = w3 * a3
+                    var best = i0, bestW = wa0
+                    if wa1 > bestW { best = i1; bestW = wa1 }
+                    if wa2 > bestW { best = i2; bestW = wa2 }
+                    if wa3 > bestW { best = i3 }
+                    let main = px[n + best]
+                    var acc = Others()
+                    let s0 = acc.add(i0, wa0, main: main, px: px, n: n)
+                    let s1 = acc.add(i1, wa1, main: main, px: px, n: n)
+                    let s2 = acc.add(i2, wa2, main: main, px: px, n: n)
+                    let s3 = acc.add(i3, wa3, main: main, px: px, n: n)
+                    var share = w0 * s0 + w1 * s1 + w2 * s2 + w3 * s3
+                    let shade = UInt8(min(255, max(0, acc.shade / av + 0.5)))
+                    out[o] = coverage
+                    out[2 * on + o] = shade
+                    if let other = acc.strongest {
+                        let sx = (s1 - s0) * (1 - fy) + (s3 - s2) * fy
+                        let sy = (s2 - s0) * (1 - fx) + (s3 - s1) * fx
+                        let g = (sx * sx + sy * sy).squareRoot()
+                        share = sharpen(share, gradient: g, lo: 0, hi: 1, scale: sc, strength: smoothstep(0.12, 0.3, g))
+                        let top = share >= 0.5
+                        out[on + o] = top ? main : other
+                        out[3 * on + o] = top ? other : main
+                        out[4 * on + o] = UInt8(min(255, max(0, (top ? 1 - share : share) * 255 + 0.5)))
+                    } else {
+                        out[on + o] = main
+                        out[3 * on + o] = main
+                        out[4 * on + o] = 0
+                    }
+                }
+            }
+        }}}}}
+    }
+
+    /// Weighs the colours of a sample's corners other than the main one.
+    private struct Others {
+        var colors: [(UInt8, Float)] = []
+        var shade: Float = 0
+
+        var strongest: UInt8? {
+            colors.max { $0.1 < $1.1 }.flatMap { $0.1 > 0 ? $0.0 : nil }
+        }
+
+        private mutating func weigh(_ c: UInt8, _ w: Float) {
+            guard w > 0 else { return }
+            if let i = colors.firstIndex(where: { $0.0 == c }) { colors[i].1 += w } else { colors.append((c, w)) }
+        }
+
+        /// Adds corner `k` with weight `wk` (bilinear weight × coverage); returns its share of `main`.
+        mutating func add(_ k: Int, _ wk: Float, main: UInt8, px: UnsafeBufferPointer<UInt8>, n: Int) -> Float {
+            guard px[k] > 0 else { return 1 }
+            shade += wk * Float(px[2 * n + k])
+            let c = px[n + k], u = px[3 * n + k], m = Float(px[4 * n + k]) / 255
+            if c == u || m == 0 {
+                if c == main { return 1 }
+                weigh(c, wk)
+                return 0
+            }
+            if c != main { weigh(c, wk * (1 - m)) }
+            if u != main { weigh(u, wk * m) }
+            return (c == main ? 1 - m : 0) + (u == main ? m : 0)
+        }
+    }
+
     /// Sums up the colours of a sample's corners.
     private struct Mix {
         var other = SIMD3<Float>(repeating: 0), otherWeight: Float = 0, shade: Float = 0
@@ -238,5 +401,104 @@ enum SharpPaint {
         let buffer = PixelBuffer(width: (rect.x1 - rect.x0) * scale, height: (rect.y1 - rect.y0) * scale)
         render(window, rect: rect, scale: scale, into: buffer.bytes, outRect: rect, outBytesPerRow: buffer.bytesPerRow)
         return buffer
+    }
+}
+
+/// Everything needed to draw a part of the paint sharp at any zoom, off the main thread: the paint
+/// layer's pixels around it and the fine tiles there (see `PaintLayer`).
+struct DetailWindow: Sendable {
+    enum Source: Sendable { case raw([UInt8]), packed(Data) }
+    /// Paint pixels around the part, enough for `SharpPaint.render` and `SharpPaint.upscale`.
+    let base: PaintWindow
+    /// Fine tiles near the part, by tile index.
+    let fine: [Int: Source]
+    let tileSize: Int, tilesPerRow: Int, fineScale: Int, planes: Int
+
+    /// Draws paint pixels `rect` at `scale` output pixels per paint pixel (a power of two) into
+    /// `out`, which shows `outRect` (paint pixels) with `outBytesPerRow`. Premultiplied RGBA. Where
+    /// there are fine tiles they are drawn; elsewhere the paint layer is scaled up, so both meet
+    /// seamlessly.
+    func render(rect: PixelRect, scale: Int, into out: UnsafeMutablePointer<UInt8>, outRect: PixelRect,
+                outBytesPerRow: Int) {
+        guard !rect.isEmpty else { return }
+        guard !fine.isEmpty else {
+            SharpPaint.render(base, rect: rect, scale: scale, into: out, outRect: outRect, outBytesPerRow: outBytesPerRow)
+            return
+        }
+        let f = fineScale, lw = base.layerWidth * f, lh = base.layerHeight * f
+        let target = PixelRect(x0: rect.x0 * f, y0: rect.y0 * f, x1: rect.x1 * f, y1: rect.y1 * f)
+        let win = SharpPaint.windowRect(for: target, layerWidth: lw, layerHeight: lh)
+        let fineWindow = PaintWindow(rect: win, layerWidth: lw, layerHeight: lh, planes: finePlanes(win),
+                                     palette: base.palette)
+        if scale >= f {
+            SharpPaint.render(fineWindow, rect: target, scale: scale / f, into: out,
+                              outRect: PixelRect(x0: outRect.x0 * f, y0: outRect.y0 * f, x1: outRect.x1 * f, y1: outRect.y1 * f),
+                              outBytesPerRow: outBytesPerRow)
+            return
+        }
+        // Fewer output pixels than fine ones: draw them one to one, then average down.
+        let full = SharpPaint.render(fineWindow, rect: target, scale: 1)
+        let step = f / max(1, scale), ox = (rect.x0 - outRect.x0) * scale, oy = (rect.y0 - outRect.y0) * scale
+        let area = UInt32(step * step)
+        for y in 0..<((rect.y1 - rect.y0) * scale) {
+            let line = out + (oy + y) * outBytesPerRow + ox * 4
+            for x in 0..<((rect.x1 - rect.x0) * scale) {
+                var sum = SIMD4<UInt32>(repeating: 0)
+                for yy in 0..<step {
+                    let src = full.bytes + (y * step + yy) * full.bytesPerRow + x * step * 4
+                    for xx in 0..<step {
+                        let p = src + xx * 4
+                        sum &+= SIMD4(UInt32(p[0]), UInt32(p[1]), UInt32(p[2]), UInt32(p[3]))
+                    }
+                }
+                let o = line + x * 4
+                for k in 0..<4 { o[k] = UInt8((sum[k] + area / 2) / area) }
+            }
+        }
+    }
+
+    /// Renders all of `rect` into a new buffer of `rect`'s size × `scale`.
+    func render(rect: PixelRect, scale: Int) -> PixelBuffer {
+        let buffer = PixelBuffer(width: (rect.x1 - rect.x0) * scale, height: (rect.y1 - rect.y0) * scale)
+        render(rect: rect, scale: scale, into: buffer.bytes, outRect: rect, outBytesPerRow: buffer.bytesPerRow)
+        return buffer
+    }
+
+    /// The fine planes of `r` (fine pixels): copied from the fine tiles, scaled up from the paint
+    /// layer where there are none.
+    private func finePlanes(_ r: PixelRect) -> [UInt8] {
+        let rw = r.x1 - r.x0, area = rw * (r.y1 - r.y0), t = tileSize * fineScale
+        var out = [UInt8](repeating: 0, count: area * planes)
+        let layerFine = PixelRect(x0: 0, y0: 0, x1: base.layerWidth * fineScale, y1: base.layerHeight * fineScale)
+        out.withUnsafeMutableBufferPointer { o in
+            for ty in (r.y0 / t)...((r.y1 - 1) / t) {
+                for tx in (r.x0 / t)...((r.x1 - 1) / t) {
+                    let tileRect = PixelRect(x0: tx * t, y0: ty * t, x1: tx * t + t, y1: ty * t + t).intersection(layerFine)
+                    let part = tileRect.intersection(r)
+                    guard !part.isEmpty else { continue }
+                    let tw = tileRect.x1 - tileRect.x0, tileArea = tw * (tileRect.y1 - tileRect.y0)
+                    let raw: [UInt8]?
+                    switch fine[ty * tilesPerRow + tx] {
+                    case .raw(let bytes)?: raw = bytes.count == tileArea * planes ? bytes : nil
+                    case .packed(let data)?: raw = PaintLayer.unpack(data, size: tileArea * planes)
+                    case nil: raw = nil
+                    }
+                    guard let raw else {
+                        SharpPaint.upscale(base, factor: fineScale, rect: part, into: o.baseAddress!, outRect: r)
+                        continue
+                    }
+                    raw.withUnsafeBufferPointer { src in
+                        for p in 0..<planes {
+                            for y in part.y0..<part.y1 {
+                                let from = p * tileArea + (y - tileRect.y0) * tw + (part.x0 - tileRect.x0)
+                                let to = p * area + (y - r.y0) * rw + (part.x0 - r.x0)
+                                (o.baseAddress! + to).update(from: src.baseAddress! + from, count: part.x1 - part.x0)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return out
     }
 }

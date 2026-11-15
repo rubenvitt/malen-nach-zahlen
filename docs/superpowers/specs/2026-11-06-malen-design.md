@@ -172,6 +172,14 @@ struct PaintCanvas: UIViewRepresentable { let session: PaintingSession }
   der Farbebene eine scharfe Fassung in Bildschirmauflösung (`SharpPaint`):
   Pinselkanten und Farbgrenzen werden dort wieder eine Bildschirmpixel breit,
   Airbrush, Lasuren und Schatten bleiben weich.
+  Dünne Striche (Radius < 8 Rasterpixel, also alles, was nah herangezoomt
+  gemalt wird) landen zusätzlich in **feinen Kacheln** mit 4× Auflösung je
+  Richtung (8 px pro Rasterpixel); dort zeichnet die Malfläche gezoomt aus den
+  feinen Kacheln, sonst aus der hochskalierten Farbebene. Eine feine Kachel
+  startet als hochskalierte Farbebene, ab dann malt jeder Strich auch hinein.
+  Ungenutzte Kacheln liegen LZ4-gepackt im Speicher; gespeichert werden sie als
+  weiterer Anhang an `paint.png`. Buntstift-Körnung wird bei dünnen Strichen
+  feiner.
 - **Clipping:** Jeder Strich-Abschnitt wird mit der Maske der gewählten Farbe
   geclippt (`CGContext.clip(to:mask:)` o. ä.), Masken pro Farbe gecacht.
   Auflösung der Farbebene: Gitter × 2 (wie Prototyp), Ränder vektor- oder

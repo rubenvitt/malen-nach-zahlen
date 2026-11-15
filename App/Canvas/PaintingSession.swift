@@ -75,9 +75,10 @@ enum BrushSize: CaseIterable, Codable {
 
     /// `paintLayerPNG` is what `paintLayerPNG()` returned earlier; a PNG of the wrong size is ignored.
     /// `paintColors` is what `paintColorData()` returned with it.
-    init(template: Template, paintLayerPNG: Data?, paintColors: Data? = nil) {
+    /// `paintFine` is what `paintFineData()` returned with them.
+    init(template: Template, paintLayerPNG: Data?, paintColors: Data? = nil, paintFine: Data? = nil) {
         self.template = template
-        layer = PaintLayer(template: template, png: paintLayerPNG, colors: paintColors)
+        layer = PaintLayer(template: template, png: paintLayerPNG, colors: paintColors, fine: paintFine)
         art = TemplateArt(template: template)
         progressByColor = Array(repeating: 0, count: template.palette.count)
         publish()
@@ -108,6 +109,9 @@ enum BrushSize: CaseIterable, Codable {
     /// Which colour the paint has, how it is shaded and mixed, saved next to `paintLayerPNG()`. Nil
     /// while all paint has the right colour, unshaded and unmixed.
     func paintColorData() -> Data? { layer.colorData() }
+
+    /// The paint painted close up, in fine detail, saved next to `paintLayerPNG()`. Nil if there is none.
+    func paintFineData() -> Data? { layer.fineData() }
 
     /// The picture as painted so far, on white. `showLines` adds borders and the numbers that are
     /// still readable at that size. `maxSide` is the longest side in pixels.

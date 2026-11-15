@@ -16,7 +16,7 @@ struct ArtworkMeta: Codable, Identifiable, Hashable, Sendable {
 
 /// One folder per artwork: `<root>/<uuid>/{template.bin, paint.png, thumb.jpg, meta.json}`.
 /// While some paint has a wrong colour, `paint.png` carries the paint
-/// colours as a trailer, so both always change together.
+/// colours as a trailer, and the paint painted in fine detail as another, so all always change together.
 /// `meta.json` is written last, so a folder without it (crash mid-create) is simply skipped.
 @MainActor @Observable final class ArtworkStore {
     let directory: URL
@@ -75,22 +75,29 @@ struct ArtworkMeta: Codable, Identifiable, Hashable, Sendable {
 
     func paintData(_ id: UUID) -> Data? {
         guard let data = try? Data(contentsOf: folder(id).appending(path: "paint.png")), !data.isEmpty else { return nil }
-        return Self.split(data).paint
+        return Self.split(Self.split(data, magic: Self.fineMagic).body).body
     }
 
     func paintColorData(_ id: UUID) -> Data? {
         guard let data = try? Data(contentsOf: folder(id).appending(path: "paint.png")) else { return nil }
-        return Self.split(data).colors
+        return Self.split(Self.split(data, magic: Self.fineMagic).body).trailer
+    }
+
+    func paintFineData(_ id: UUID) -> Data? {
+        guard let data = try? Data(contentsOf: folder(id).appending(path: "paint.png")) else { return nil }
+        return Self.split(data, magic: Self.fineMagic).trailer
     }
 
     /// Empty paint data or a nil thumbnail keep what is on disk — never overwrite good data with nothing.
-    /// `colors` belongs to `paint`: nil means all paint has its own colour.
-    func save(_ id: UUID, paint: Data, colors: Data? = nil, thumbnail: Data?, progress: Double) {
+    /// `colors` and `fine` belong to `paint`: nil means all paint has its own colour, or there is
+    /// no paint painted in fine detail.
+    func save(_ id: UUID, paint: Data, colors: Data? = nil, fine: Data? = nil, thumbnail: Data?, progress: Double) {
         guard var meta = artworks.first(where: { $0.id == id }) else { return }
         let folder = folder(id)
         do {
             if !paint.isEmpty {
-                try Self.join(paint, colors).write(to: folder.appending(path: "paint.png"), options: .atomic)
+                try Self.join(Self.join(paint, colors), fine, magic: Self.fineMagic)
+                    .write(to: folder.appending(path: "paint.png"), options: .atomic)
             }
             if let thumbnail, !thumbnail.isEmpty {
                 try thumbnail.write(to: folder.appending(path: "thumb.jpg"), options: .atomic)
@@ -138,29 +145,31 @@ struct ArtworkMeta: Codable, Identifiable, Hashable, Sendable {
 
     // MARK: Helpers
 
-    /// Paint colours ride at the end of `paint.png` (`colors`, length as UInt64 LE, magic), so paint
-    /// and colours are always written together in one atomic write. Image decoders ignore bytes
-    /// after the PNG end chunk, and files without the trailer simply have no colours.
+    /// Paint colours ride at the end of `paint.png` (`colors`, length as UInt64 LE, magic), and the
+    /// fine paint after them the same way, so everything is always written together in one atomic
+    /// write. Image decoders ignore bytes after the PNG end chunk, and files without a trailer simply
+    /// have no colours or no fine paint.
     private static let colorsMagic = Data("MNZCOLv1".utf8)
+    private static let fineMagic = Data("MNZFNTv1".utf8)
 
-    private static func join(_ paint: Data, _ colors: Data?) -> Data {
-        guard let colors else { return paint }
-        var out = paint
-        out.append(colors)
-        withUnsafeBytes(of: UInt64(colors.count).littleEndian) { out.append(contentsOf: $0) }
-        out.append(colorsMagic)
+    private static func join(_ body: Data, _ trailer: Data?, magic: Data = colorsMagic) -> Data {
+        guard let trailer else { return body }
+        var out = body
+        out.append(trailer)
+        withUnsafeBytes(of: UInt64(trailer.count).littleEndian) { out.append(contentsOf: $0) }
+        out.append(magic)
         return out
     }
 
-    private static func split(_ blob: Data) -> (paint: Data, colors: Data?) {
-        let tail = colorsMagic.count + 8
-        guard blob.count > tail, blob.suffix(colorsMagic.count) == colorsMagic else { return (blob, nil) }
-        let lengthBytes = blob.dropLast(colorsMagic.count).suffix(8)
+    private static func split(_ blob: Data, magic: Data = colorsMagic) -> (body: Data, trailer: Data?) {
+        let tail = magic.count + 8
+        guard blob.count > tail, blob.suffix(magic.count) == magic else { return (blob, nil) }
+        let lengthBytes = blob.dropLast(magic.count).suffix(8)
         let length = lengthBytes.enumerated().reduce(UInt64(0)) { $0 | UInt64($1.element) << (8 * UInt64($1.offset)) }
         guard length <= UInt64(blob.count - tail) else { return (blob, nil) }
-        let paintEnd = blob.count - tail - Int(length)
+        let bodyEnd = blob.count - tail - Int(length)
         let start = blob.startIndex
-        return (Data(blob[start..<(start + paintEnd)]), Data(blob[(start + paintEnd)..<(start + paintEnd + Int(length))]))
+        return (Data(blob[start..<(start + bodyEnd)]), Data(blob[(start + bodyEnd)..<(start + bodyEnd + Int(length))]))
     }
 
     private func writeMeta(_ meta: ArtworkMeta) throws {
