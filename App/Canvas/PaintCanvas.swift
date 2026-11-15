@@ -149,7 +149,12 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
             tiled.levelsOfDetail = tiled.levelsOfDetailBias + 4
         }
         updateInputMode()   // the pinch recognizer exists only once zooming is configured
-        if isAtFit { zoomToFit(animated: false) } else { centerContent() }
+        // Half the scroll view on every side: each edge of the picture can reach the middle of the
+        // screen (the scroll view's centre at every rotation), but never cross it.
+        let half = side / 2
+        let reach = UIEdgeInsets(top: half, left: half, bottom: half, right: half)
+        if scrollView.contentInset != reach { scrollView.contentInset = reach }
+        if isAtFit { zoomToFit(animated: false) } else { clampOffset() }
         updateDetail()
     }
 
@@ -158,29 +163,32 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
         setRotation(0, animated: animated)
         scrollView.setZoomScale(fitScale, animated: animated)
         isAtFit = true
-        centerContent(scale: fitScale)
         let size = scrollView.bounds.size
         let w = CGFloat(session.template.width) * fitScale, h = CGFloat(session.template.height) * fitScale
         scrollView.setContentOffset(CGPoint(x: (w - size.width) / 2, y: (h - size.height) / 2), animated: animated)
         if !animated { updateDetail() }
     }
 
-    /// Centres small content in the scroll view (and so on screen). The scroll view is larger than
-    /// the screen, so the insets also let every edge of the picture reach the inscribed circle of
-    /// the screen; that circle is visible at every rotation.
-    private func centerContent(scale: CGFloat? = nil) {
-        let size = scrollView.bounds.size, z = scale ?? scrollView.zoomScale
-        let w = CGFloat(session.template.width) * z, h = CGFloat(session.template.height) * z
-        let reach = max(0, (size.width - min(bounds.width, bounds.height)) / 2)
-        let x = max(reach, (size.width - w) / 2), y = max(reach, (size.height - h) / 2)
-        scrollView.contentInset = UIEdgeInsets(top: y, left: x, bottom: y, right: x)
+    /// Keeps the picture's edges from crossing the middle of the screen after the offset was set
+    /// directly (turning, resizing), where the scroll view itself does not hold the limits.
+    private func clampOffset() {
+        let inset = scrollView.contentInset, size = scrollView.bounds.size, content = scrollView.contentSize
+        let o = scrollView.contentOffset
+        let x = min(max(o.x, -inset.left), content.width + inset.right - size.width)
+        let y = min(max(o.y, -inset.top), content.height + inset.bottom - size.height)
+        if x != o.x || y != o.y { scrollView.contentOffset = CGPoint(x: x, y: y) }
+    }
+
+    var contentInsetForTesting: UIEdgeInsets { scrollView.contentInset }
+    var contentOffsetForTesting: CGPoint {
+        get { scrollView.contentOffset }
+        set { scrollView.contentOffset = newValue }
     }
 
     var contentViewForTesting: UIView { content }
     var zoomScaleForTesting: CGFloat { scrollView.zoomScale }
 
     func viewForZooming(in scrollView: UIScrollView) -> UIView? { content }
-    func scrollViewDidZoom(_ scrollView: UIScrollView) { centerContent() }
     func scrollViewDidScroll(_ scrollView: UIScrollView) { updateDetail() }
     func scrollViewDidEndZooming(_ scrollView: UIScrollView, with view: UIView?, atScale scale: CGFloat) { updateDetail() }
     func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) { updateDetail() }
@@ -221,6 +229,7 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
         let a = scrollView.convert(pivot, from: self), b = scrollView.convert(moved, from: self)
         scrollView.contentOffset.x += b.x - a.x
         scrollView.contentOffset.y += b.y - a.y
+        clampOffset()
     }
 
     private func setRotation(_ angle: CGFloat, animated: Bool) {

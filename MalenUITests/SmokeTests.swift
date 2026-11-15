@@ -19,6 +19,15 @@ final class SmokeTests: XCTestCase {
         XCTAssertTrue(app.buttons["pot-2"].isSelected)
         attach(app, "Malen")
 
+        // Zen mode: the tools go away, one quiet button brings them back.
+        app.buttons["zenMode"].tap()
+        XCTAssertTrue(app.buttons["exitZenMode"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["pot-1"].exists)
+        XCTAssertFalse(app.buttons["backToGallery"].exists)
+        attach(app, "Zen")
+        app.buttons["exitZenMode"].tap()
+        XCTAssertTrue(app.buttons["pot-1"].waitForExistence(timeout: 5))
+
         app.buttons["backToGallery"].tap()
         XCTAssertTrue(app.buttons["artworkCard"].waitForExistence(timeout: 10))
         XCTAssertEqual(app.buttons.matching(identifier: "artworkCard").count, 1)

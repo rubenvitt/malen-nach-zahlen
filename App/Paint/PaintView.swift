@@ -13,6 +13,8 @@ struct PaintView: View {
     @State private var completion: CompletionView.Mode?
     @State private var failed = false
     @State private var palette: [PaletteColor] = []
+    /// Zen mode: the tools step aside and only the picture (and a quiet way back) stays.
+    @State private var zen = false
 
     private var title: String { store.artworks.first { $0.id == id }?.title ?? "" }
 
@@ -21,10 +23,17 @@ struct PaintView: View {
             Theme.paper.ignoresSafeArea()
             if let session {
                 PaintCanvas(session: session).ignoresSafeArea()
-                PaintChrome(session: session, palette: palette, title: title,
-                            onBack: close,
-                            onUndo: { session.undo() },   // undo fires onStrokeEnded → autosave
-                            onShowFinished: { completion = .look })
+                if zen {
+                    ZenExitButton { zen = false }
+                        .transition(.opacity)
+                } else {
+                    PaintChrome(session: session, palette: palette, title: title,
+                                onBack: close,
+                                onUndo: { session.undo() },   // undo fires onStrokeEnded → autosave
+                                onShowFinished: { completion = .look },
+                                onZen: { zen = true })
+                        .transition(.opacity)
+                }
                 if let completion {
                     CompletionView(session: session, title: title, palette: palette,
                                    fallback: store.artworks.first { $0.id == id }.flatMap(store.thumbnail(for:)),
@@ -46,6 +55,8 @@ struct PaintView: View {
         .toolbar(.hidden, for: .navigationBar)
         .statusBarHidden()
         .animation(reduceMotion ? .easeInOut(duration: 0.2) : Theme.spring, value: completion)
+        .animation(.easeInOut(duration: reduceMotion ? 0.15 : 0.3), value: zen)
+        .sensoryFeedback(.selection, trigger: zen)
         .task { await load() }
         .onChange(of: scenePhase) { if scenePhase != .active { autosaver?.flush() } }
         .onDisappear { autosaver?.flush() }
@@ -94,6 +105,7 @@ private struct PaintChrome: View {
     let onBack: () -> Void
     let onUndo: () -> Void
     let onShowFinished: () -> Void
+    let onZen: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Finished colours leave the bar unless asked for; the selected one stays until another is picked.
@@ -152,6 +164,8 @@ private struct PaintChrome: View {
                 RoundButton(systemImage: "arrow.up.left.and.arrow.down.right", label: "Ganzes Bild") {
                     session.fitWholePicture()
                 }
+                RoundButton(systemImage: "eye.slash", label: "Werkzeuge ausblenden", action: onZen)
+                    .accessibilityIdentifier("zenMode")
             }
             .foregroundStyle(Theme.ink)
             Spacer()
@@ -169,6 +183,28 @@ private struct PaintChrome: View {
         .sensoryFeedback(.selection, trigger: session.selectedColor)
         .sensoryFeedback(.selection, trigger: session.tool)
         .sensoryFeedback(.success, trigger: session.completedColors.count)
+    }
+}
+
+/// All that is left in zen mode: a small, quiet button in the corner where the tools were.
+private struct ZenExitButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "eye")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Theme.ink.opacity(0.7))
+                .frame(width: 44, height: 44)
+                .background(.ultraThinMaterial, in: Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(PressableStyle())
+        .opacity(0.6)
+        .accessibilityLabel("Werkzeuge zeigen")
+        .accessibilityIdentifier("exitZenMode")
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        .padding(.horizontal, 20).padding(.vertical, 16)
     }
 }
 
