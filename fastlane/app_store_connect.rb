@@ -88,6 +88,39 @@ module AppStoreConnect
     end
   end
 
+  # xcodebuild -allowProvisioningUpdates creates a new signing certificate on every CI run, because the
+  # runner's keychain (with the private key) is thrown away afterwards. Apple allows only a few per team,
+  # so the runs pile up until signing fails with "maximum number of certificates".
+  # Certificates made with an API key are named "Created via API"; only those are revoked, so the
+  # certificates of your own Macs stay. Builds already uploaded to TestFlight or the App Store keep working.
+  class Certificates
+    CI_NAME = "Created via API".freeze
+
+    def initialize(client, log: ->(message) { puts(message) })
+      @api = client
+      @log = log
+    end
+
+    def revoke_ci_certificates
+      certificates = @api.all("/v1/certificates", "limit" => 200).select { |certificate| ci?(certificate) }
+      certificates.each do |certificate|
+        attributes = certificate["attributes"]
+        @api.delete("/v1/certificates/#{certificate["id"]}")
+        @log.call("Revoked #{attributes["certificateType"]} certificate #{attributes["serialNumber"]} " \
+                  "(#{attributes["name"]}, expires #{attributes["expirationDate"]})")
+      end
+      @log.call("Certificates: #{certificates.size} created via API revoked")
+      certificates.size
+    end
+
+    private
+
+    def ci?(certificate)
+      attributes = certificate["attributes"] || {}
+      [attributes["name"], attributes["displayName"]].any? { |name| name.to_s.include?(CI_NAME) }
+    end
+  end
+
   class Setup
     # China mainland needs an ICP filing number, which this app does not have.
     EXCLUDED_TERRITORIES = ["CHN"].freeze

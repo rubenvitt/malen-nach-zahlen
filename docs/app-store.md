@@ -21,6 +21,10 @@ Komplett kostenlos: alle Funktionen, die 4 mitgelieferten Motive und beliebig vi
 | Preis, Länder, Altersfreigabe, Texte und Screenshots, optional einreichen | Workflow **App Store** (von Hand starten, nur auf `main`) |
 | Freigegebene Version veröffentlichen | Workflow **Release** (von Hand starten, nur auf `main`) |
 
+## Signierzertifikate im Workflow „TestFlight“
+
+Xcode legt beim Signieren in der CI jedes Mal ein neues Zertifikat an („Created via API“), denn der Runner verwirft danach seinen Schlüsselbund mit dem privaten Schlüssel. Apple erlaubt nur wenige Zertifikate je Team; sind sie voll, bricht das Archivieren mit „maximum number of certificates“ ab. Darum widerruft `fastlane revoke_ci_certificates` vor dem Archivieren und am Ende jedes Laufs alle Zertifikate, die über einen API-Schlüssel entstanden sind. Zertifikate von den eigenen Macs bleiben, und schon hochgeladene Builds laufen weiter.
+
 ## Was der Workflow „App Store“ einrichtet
 
 Vor dem Hochladen der Texte läuft `fastlane store_setup` (`fastlane/app_store_connect.rb`, über die App Store Connect API). Es legt nur an, was fehlt; Preise und Länder, die schon gesetzt sind, bleiben unverändert. Ändern geht danach in App Store Connect.
