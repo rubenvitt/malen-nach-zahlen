@@ -51,3 +51,34 @@ private func close(_ a: CGPoint, _ b: CGPoint, _ tolerance: CGFloat = 0.01) -> B
     let t = view.session.template
     #expect(close(contentPoint(view, CGPoint(x: 200, y: 150)), CGPoint(x: CGFloat(t.width) / 2, y: CGFloat(t.height) / 2), 0.05))
 }
+
+/// The screen's centre, in picture points.
+@MainActor private func centrePoint(_ view: PaintCanvasView) -> CGPoint {
+    contentPoint(view, CGPoint(x: view.bounds.midX, y: view.bounds.midY))
+}
+
+@MainActor @Test func everyEdgeReachesTheMiddleButNoFurther() {
+    let view = makeCanvas()
+    view.zoomForTesting(4)
+    let t = view.session.template, inset = view.contentInsetForTesting
+    let zoomed = CGSize(width: CGFloat(t.width) * view.zoomScaleForTesting, height: CGFloat(t.height) * view.zoomScaleForTesting)
+    let side = hypot(view.bounds.width, view.bounds.height).rounded(.up)
+    // Scrolled all the way to the top left: the picture's top left corner sits in the middle.
+    view.contentOffsetForTesting = CGPoint(x: -inset.left, y: -inset.top)
+    #expect(close(centrePoint(view), .zero, 0.05))
+    // All the way to the bottom right: the bottom right corner sits in the middle.
+    view.contentOffsetForTesting = CGPoint(x: zoomed.width + inset.right - side, y: zoomed.height + inset.bottom - side)
+    #expect(close(centrePoint(view), CGPoint(x: CGFloat(t.width), y: CGFloat(t.height)), 0.05))
+}
+
+@MainActor @Test func turningAtTheEdgeKeepsThePictureInTheMiddle() {
+    let view = makeCanvas()
+    view.zoomForTesting(4)
+    let inset = view.contentInsetForTesting
+    view.contentOffsetForTesting = CGPoint(x: -inset.left, y: -inset.top)
+    // Turning around a point near the screen's edge would swing the corner past the middle.
+    view.rotate(by: .pi / 2, around: CGPoint(x: 20, y: 280))
+    let t = view.session.template, c = centrePoint(view)
+    #expect(c.x >= -0.05 && c.x <= CGFloat(t.width) + 0.05)
+    #expect(c.y >= -0.05 && c.y <= CGFloat(t.height) + 0.05)
+}

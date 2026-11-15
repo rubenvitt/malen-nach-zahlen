@@ -189,6 +189,9 @@ struct PaintCanvas: UIViewRepresentable { let session: PaintingSession }
   0.5×–12×). Damit ist Handballen-Malen ausgeschlossen. **Fallback:** Solange
   noch nie ein Stift erkannt wurde, malt ein Finger (für Geräte ohne Stift und
   für App Review); sobald ein Stift malt, gilt Stift-malt/Finger-navigiert.
+- **Verschieben-Grenze:** Jeder Bildrand lässt sich bis in die Bildschirmmitte
+  schieben (auch gedreht), aber nicht darüber hinaus – das Bild verlässt nie
+  ganz den Bildschirm.
 - Coalesced + predicted touches für flüssige Linien; runde Kappen; Pinselgröße
   in Bildschirmpunkten (bleibt beim Zoomen gleich groß auf dem Display),
   stufenlos 1,5–80 pt per Regler, je Werkzeug gemerkt. Buntstift: feine harte
@@ -225,6 +228,8 @@ seitlich möglich): runde Töpfe mit Nummer, Farbe, Fortschrittsring; fertige Fa
 bekommt Haken und eine kleine Animation und rutscht ans Ende. Gewählte Farbe:
 ihre noch offenen Felder pulsieren kurz sanft auf (findet kleine Felder).
 Pinselgröße (3 Stufen), Rückgängig, „Ganzes Bild", Zurück zur Galerie.
+**Zen-Modus:** „Werkzeuge ausblenden" blendet alle Bedienelemente aus, nur ein
+kleiner, leiser Knopf oben rechts („Werkzeuge zeigen") bleibt.
 Autosave nach jedem Strich (gedrosselt) und beim Verlassen/Hintergrund.
 
 **Fertig** – Konfetti, Bild ohne Ränder/Nummern („Rand ausblenden"-Umschalter),
