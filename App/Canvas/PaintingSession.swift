@@ -99,6 +99,15 @@ enum BrushSize: CaseIterable, Codable {
         if tool.isShading { tool = lastPaintTool }
     }
 
+    /// Which paint pots to offer, in order: open colours first, finished ones only with `showDone`
+    /// (the selected colour always stays until another is picked).
+    func potOrder(showDone: Bool) -> [Int] {
+        let done = completedColors
+        return template.palette.indices
+            .filter { showDone || !done.contains($0) || $0 == selectedColor }
+            .sorted { a, b in (done.contains(a) ? 1 : 0, a) < (done.contains(b) ? 1 : 0, b) }
+    }
+
     /// Zooms out to show the whole picture ("Ganzes Bild").
     func showWholePicture() { canvasView?.zoomToFit(animated: true) }
 

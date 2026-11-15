@@ -229,7 +229,11 @@ bekommt Haken und eine kleine Animation und rutscht ans Ende. Gewählte Farbe:
 ihre noch offenen Felder pulsieren kurz sanft auf (findet kleine Felder).
 Pinselgröße (3 Stufen), Rückgängig, „Ganzes Bild", Zurück zur Galerie.
 **Zen-Modus:** „Werkzeuge ausblenden" blendet alle Bedienelemente aus, nur ein
-kleiner, leiser Knopf oben rechts („Werkzeuge zeigen") bleibt.
+kleiner, leiser Knopf oben rechts („Werkzeuge zeigen") bleibt. Darunter eine
+schmale, halbtransparente Leiste mit dem, was man gerade in der Hand hat:
+Werkzeug, Pinselgröße (Punkt in Strichstärke) und aktuelle Farbe (mit Nummer
+und Fortschrittsring). Antippen öffnet ein kleines Popover zum Wechseln – die
+Farbtöpfe erscheinen erst dann und schließen sich nach der Wahl wieder.
 Autosave nach jedem Strich (gedrosselt) und beim Verlassen/Hintergrund.
 
 **Fertig** – Konfetti, Bild ohne Ränder/Nummern („Rand ausblenden"-Umschalter),

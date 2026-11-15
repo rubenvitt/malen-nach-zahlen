@@ -25,8 +25,17 @@ final class SmokeTests: XCTestCase {
         XCTAssertFalse(app.buttons["pot-1"].exists)
         XCTAssertFalse(app.buttons["backToGallery"].exists)
         attach(app, "Zen")
+        // The colours stay hidden until asked for; a pick closes them again.
+        XCTAssertTrue(app.buttons["zenTool"].exists)
+        XCTAssertTrue(app.buttons["zenSize"].exists)
+        app.buttons["zenColor"].tap()
+        XCTAssertTrue(app.buttons["pot-1"].waitForExistence(timeout: 5))
+        app.buttons["pot-1"].tap()
+        let closed = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: app.buttons["pot-1"])
+        wait(for: [closed], timeout: 5)
         app.buttons["exitZenMode"].tap()
         XCTAssertTrue(app.buttons["pot-1"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["pot-1"].isSelected)
 
         app.buttons["backToGallery"].tap()
         XCTAssertTrue(app.buttons["artworkCard"].waitForExistence(timeout: 10))
