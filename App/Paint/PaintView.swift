@@ -24,7 +24,7 @@ struct PaintView: View {
             if let session {
                 PaintCanvas(session: session).ignoresSafeArea()
                 if zen {
-                    ZenExitButton { zen = false }
+                    ZenControls(session: session, palette: palette) { zen = false }
                         .transition(.opacity)
                 } else {
                     PaintChrome(session: session, palette: palette, title: title,
@@ -111,12 +111,7 @@ private struct PaintChrome: View {
     /// Finished colours leave the bar unless asked for; the selected one stays until another is picked.
     @AppStorage("paint.showDoneColors") private var showDone = false
 
-    private var order: [Int] {
-        let done = session.completedColors
-        return palette.indices
-            .filter { showDone || !done.contains($0) || $0 == session.selectedColor }
-            .sorted { a, b in (done.contains(a) ? 1 : 0, a) < (done.contains(b) ? 1 : 0, b) }
-    }
+    private var order: [Int] { session.potOrder(showDone: showDone) }
 
     private var pots: some View {
         HStack(spacing: 6) {
@@ -186,25 +181,144 @@ private struct PaintChrome: View {
     }
 }
 
-/// All that is left in zen mode: a small, quiet button in the corner where the tools were.
-private struct ZenExitButton: View {
+/// All that is left in zen mode: a quiet column in the corner where the tools were. It shows only
+/// what is in hand – tool, brush size, colour – and opens a small panel to change one when tapped;
+/// the colours stay out of sight until then.
+private struct ZenControls: View {
+    @Bindable var session: PaintingSession
+    let palette: [PaletteColor]
+    let onExit: () -> Void
+
+    private enum Panel { case tool, size, color }
+    @State private var open: Panel?
+    @AppStorage("paint.showDoneColors") private var showDone = false
+
+    private var color: PaletteColor? {
+        palette.indices.contains(session.selectedColor) ? palette[session.selectedColor] : nil
+    }
+
+    var body: some View {
+        VStack(spacing: 10) {
+            ZenButton(action: onExit) {
+                Image(systemName: "eye").font(.system(size: 16, weight: .semibold))
+            }
+            .accessibilityLabel("Werkzeuge zeigen")
+            .accessibilityIdentifier("exitZenMode")
+
+            VStack(spacing: 2) {
+                ZenButton { open = .tool } label: {
+                    Image(systemName: session.tool.symbol).font(.system(size: 16, weight: .semibold))
+                }
+                .accessibilityLabel(session.tool.label)
+                .accessibilityIdentifier("zenTool")
+                .popover(isPresented: isOpen(.tool), arrowEdge: .trailing) {
+                    ToolRail(tool: $session.tool, framed: false) { open = nil }
+                        .padding(8)
+                        .presentationCompactAdaptation(.popover)
+                }
+
+                ZenButton { open = .size } label: {
+                    Circle()
+                        .fill(Theme.ink.opacity(0.75))
+                        .frame(width: min(session.brushDiameter, 24), height: min(session.brushDiameter, 24))
+                }
+                .accessibilityLabel("Pinselgröße")
+                .accessibilityValue(Text(verbatim: "\(Int(session.brushDiameter.rounded())) pt"))
+                .accessibilityIdentifier("zenSize")
+                .popover(isPresented: isOpen(.size), arrowEdge: .trailing) {
+                    BrushSizeControl(diameter: $session.brushDiameter, framed: false)
+                        .padding(12)
+                        .presentationCompactAdaptation(.popover)
+                }
+
+                ZenButton { open = .color } label: { colorDot }
+                    .accessibilityLabel("Farbe \(session.selectedColor + 1)")
+                    .accessibilityIdentifier("zenColor")
+                    .popover(isPresented: isOpen(.color), arrowEdge: .trailing) {
+                        colorPanel.presentationCompactAdaptation(.popover)
+                    }
+            }
+            .padding(2)
+            .background(.ultraThinMaterial, in: Capsule())
+        }
+        .foregroundStyle(Theme.ink.opacity(0.7))
+        // Quiet while painting, clear while choosing.
+        .opacity(open == nil ? 0.6 : 1)
+        .animation(.easeInOut(duration: 0.2), value: open)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        .padding(.horizontal, 20).padding(.vertical, 16)
+        .sensoryFeedback(.selection, trigger: session.selectedColor)
+        .sensoryFeedback(.selection, trigger: session.tool)
+    }
+
+    /// The colour in hand with its number, ringed by how far it is painted.
+    private var colorDot: some View {
+        let progress = session.progressByColor.indices.contains(session.selectedColor)
+            ? session.progressByColor[session.selectedColor] : 0
+        let done = session.completedColors.contains(session.selectedColor)
+        return ZStack {
+            Circle()
+                .trim(from: 0, to: progress)
+                .stroke(done ? Color.green : Theme.ink.opacity(0.6), style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .frame(width: 36, height: 36)
+            Circle()
+                .fill(color?.color ?? .clear)
+                .overlay(Circle().strokeBorder(.black.opacity(0.08), lineWidth: 1))
+                .frame(width: 28, height: 28)
+            Group {
+                if done {
+                    Image(systemName: "checkmark").font(.system(size: 12, weight: .heavy))
+                } else {
+                    Text(verbatim: "\(session.selectedColor + 1)")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                }
+            }
+            .foregroundStyle(color?.isLight ?? true ? Color.black.opacity(0.72) : .white)
+        }
+    }
+
+    /// The paint pots, only while picking; a pick closes the panel again.
+    private var colorPanel: some View {
+        let indices = session.potOrder(showDone: showDone)
+        let columns = min(5, max(1, indices.count))
+        let rows = (indices.count + columns - 1) / columns
+        return ScrollView(showsIndicators: false) {
+            LazyVGrid(columns: Array(repeating: GridItem(.fixed(66), spacing: 0), count: columns), spacing: 0) {
+                ForEach(indices, id: \.self) { index in
+                    PaintPot(color: palette[index], number: index + 1,
+                             progress: session.progressByColor.indices.contains(index) ? session.progressByColor[index] : 0,
+                             isDone: session.completedColors.contains(index),
+                             isSelected: session.selectedColor == index) {
+                        withAnimation(Theme.spring) { session.selectColor(index) }
+                        open = nil
+                    }
+                }
+            }
+            .padding(12)
+        }
+        .frame(width: CGFloat(columns) * 66 + 24, height: min(CGFloat(rows) * 72 + 24, 384))
+    }
+
+    private func isOpen(_ panel: Panel) -> Binding<Bool> {
+        Binding(get: { open == panel }, set: { if !$0, open == panel { open = nil } })
+    }
+}
+
+/// A small round button for the zen column.
+private struct ZenButton<Label: View>: View {
     let action: () -> Void
+    @ViewBuilder let label: Label
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: "eye")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(Theme.ink.opacity(0.7))
+            label
                 .frame(width: 44, height: 44)
                 .background(.ultraThinMaterial, in: Circle())
                 .contentShape(Circle())
         }
         .buttonStyle(PressableStyle())
-        .opacity(0.6)
-        .accessibilityLabel("Werkzeuge zeigen")
-        .accessibilityIdentifier("exitZenMode")
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-        .padding(.horizontal, 20).padding(.vertical, 16)
     }
 }
 
@@ -230,6 +344,8 @@ struct RoundButton: View {
 /// (up to its frame).
 private struct BrushSizeControl: View {
     @Binding var diameter: CGFloat
+    /// Without its own capsule, e.g. inside a popover.
+    var framed = true
 
     private static let range = PaintingSession.diameterRange
     /// 0...1 along the slider; logarithmic so that the fine sizes get as much room as the broad ones.
@@ -253,7 +369,7 @@ private struct BrushSizeControl: View {
         }
         .padding(.leading, 8).padding(.trailing, 16)
         .frame(height: 52)
-        .background(.ultraThinMaterial, in: Capsule())
+        .background(framed ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(.clear), in: Capsule())
     }
 }
 
@@ -287,6 +403,9 @@ private struct DoneToggle: View {
 /// Brush types and shading tools, in a column on the leading edge.
 private struct ToolRail: View {
     @Binding var tool: BrushKind
+    /// Without its own capsule, e.g. inside a popover.
+    var framed = true
+    var onPick: () -> Void = {}
 
     private static let paint: [BrushKind] = [.pencil, .brush, .crayon, .airbrush]
     private static let shading: [BrushKind] = [.shadow, .light]
@@ -298,12 +417,12 @@ private struct ToolRail: View {
             ForEach(Self.shading, id: \.self) { kind in button(kind) }
         }
         .padding(4)
-        .background(.ultraThinMaterial, in: Capsule())
+        .background(framed ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(.clear), in: Capsule())
         .foregroundStyle(Theme.ink)
     }
 
     private func button(_ kind: BrushKind) -> some View {
-        Button { withAnimation(Theme.spring) { tool = kind } } label: {
+        Button { withAnimation(Theme.spring) { tool = kind }; onPick() } label: {
             Image(systemName: kind.symbol)
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(tool == kind ? Color.accentColor : Theme.ink.opacity(0.7))
