@@ -7,7 +7,7 @@ PINTE COMO COM UM PINCEL
 Você pinta traço a traço com o Apple Pencil, com liberdade e precisão, como no papel. Nada se preenche sozinho, e o capricho de cada borda depende só de você.
 
 COM CALMA
-Sem cronômetro, sem pontos, sem notificações. Com os dedos você move, amplia e gira a imagem como uma folha de papel. Áreas concluídas são preenchidas por inteiro, cores concluídas ganham um visto.
+Sem cronômetro, sem pontos, sem notificações. Com os dedos você move, amplia e gira a imagem como uma folha de papel. Cores concluídas ganham um visto e podem ser ocultadas da barra de cores.
 
 SUA IMAGEM FICA SALVA
 Cada traço é salvo automaticamente. Quando a imagem estiver pronta, oculte os contornos e compartilhe.
@@ -15,7 +15,9 @@ Cada traço é salvo automaticamente. Quando a imagem estiver pronta, oculte os 
 E MAIS
 • Mais de 70 motivos em 10 pacotes temáticos para começar na hora
 • De 4 a 30 cores, de grosso a muito fino
-• Três tamanhos de pincel, desfazer também com toque duplo no Apple Pencil
+• Seis ferramentas: lápis de cor, pincel, giz, aerógrafo, sombra e luz, sensíveis à pressão
+• Tamanho do pincel ajustável sem etapas, desfazer também com toque duplo no Apple Pencil
+• Modo zen: oculte os controles e só pinte
 • Sem caneta, você pinta com o dedo
 • Modo claro e escuro, suporte ao VoiceOver
 • Funciona totalmente offline

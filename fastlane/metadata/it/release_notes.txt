@@ -1,3 +1,9 @@
+- Sei strumenti: matita colorata, pennello, gesso, aerografo, più ombra e luce che scuriscono o schiariscono il colore in base alla pressione della penna
+- Dimensione del pennello regolabile in modo continuo
+- Modalità zen: nascondi i comandi, una barra discreta tiene a portata di mano strumento, dimensione e colore
+- I colori finiti spariscono dalla barra dei colori
+- Il colore resta nitido anche con molto zoom
+- Niente più bordi bianchi quando dipingi sopra un altro colore
 - 68 nuovi soggetti in 10 collezioni a tema
 - I bordi ora sono linee morbide e fluide
 - Pittura libera: dipingi ovunque, anche sopra aree finite con un altro colore

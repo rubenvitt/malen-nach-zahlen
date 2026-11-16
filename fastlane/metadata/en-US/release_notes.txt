@@ -1,3 +1,9 @@
+- Six tools: colored pencil, brush, chalk, airbrush, plus shadow and light that darken or brighten existing paint depending on pencil pressure
+- Smoothly adjustable brush size
+- Zen mode: hide the controls, a quiet bar keeps tool, size and color at hand
+- Finished colors disappear from the color bar
+- Paint stays crisp even when zoomed in close
+- No more white edges when painting over a color
 - 68 new pictures in 10 themed collections
 - Borders are now smooth, flowing lines
 - Free painting: paint anywhere, even over finished fields with another color
