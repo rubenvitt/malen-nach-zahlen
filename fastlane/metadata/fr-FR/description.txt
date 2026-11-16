@@ -7,7 +7,7 @@ PEINDRE COMME AU PINCEAU
 Vous peignez trait après trait avec l'Apple Pencil, librement et avec précision, comme sur du papier. Rien ne se remplit tout seul : la netteté de chaque bord ne dépend que de vous.
 
 EN TOUTE TRANQUILLITÉ
-Pas de chrono, pas de points, pas de notifications. Avec les doigts, vous déplacez, zoomez et tournez l'image comme une feuille de papier. Les zones terminées se remplissent proprement, les couleurs terminées sont cochées.
+Pas de chrono, pas de points, pas de notifications. Avec les doigts, vous déplacez, zoomez et tournez l'image comme une feuille de papier. Les couleurs terminées sont cochées et peuvent être masquées de la barre de couleurs.
 
 VOTRE IMAGE EST CONSERVÉE
 Chaque trait est enregistré automatiquement. Une fois l'image terminée, masquez les contours et partagez-la.
@@ -15,7 +15,9 @@ Chaque trait est enregistré automatiquement. Une fois l'image terminée, masque
 ET AUSSI
 • Plus de 70 motifs en 10 packs thématiques pour commencer tout de suite
 • De 4 à 30 couleurs, du plus grossier au très fin
-• Trois tailles de pinceau, annulation aussi par double-toucher sur l'Apple Pencil
+• Six outils : crayon de couleur, pinceau, craie, aérographe, ombre et lumière, sensibles à la pression
+• Taille du pinceau réglable en continu, annulation aussi par double-toucher sur l'Apple Pencil
+• Mode zen : masquez les commandes et ne faites plus que peindre
 • Sans stylet, vous peignez avec le doigt
 • Modes clair et sombre, prise en charge de VoiceOver
 • Fonctionne entièrement hors ligne

@@ -7,7 +7,7 @@ MALEN WIE MIT DEM PINSEL
 Du malst Strich für Strich mit dem Apple Pencil, frei und genau wie auf Papier. Nichts füllt sich von selbst, und wie sauber jeder Rand wird, liegt ganz bei dir.
 
 GANZ IN RUHE
-Kein Timer, keine Punkte, keine Benachrichtigungen. Mit den Fingern verschiebst, zoomst und drehst du das Bild wie ein Blatt Papier. Fertige Felder füllen sich sauber aus, fertige Farben bekommen einen Haken.
+Kein Timer, keine Punkte, keine Benachrichtigungen. Mit den Fingern verschiebst, zoomst und drehst du das Bild wie ein Blatt Papier. Fertige Farben bekommen einen Haken und lassen sich aus der Farbleiste ausblenden.
 
 DEIN BILD BLEIBT
 Jeder Strich wird automatisch gespeichert. Ist das Bild fertig, blendest du die Ränder aus und teilst es.
@@ -15,7 +15,9 @@ Jeder Strich wird automatisch gespeichert. Ist das Bild fertig, blendest du die 
 AUSSERDEM
 • Über 70 Motive in 10 Themenpaketen, um sofort loszulegen
 • 4 bis 30 Farben, von grob bis sehr fein
-• Drei Pinselgrößen, Rückgängig auch per Doppeltipp auf den Apple Pencil
+• Sechs Werkzeuge: Buntstift, Pinsel, Kreide, Airbrush, Schatten und Licht, mit Stiftdruck
+• Pinselgröße stufenlos, Rückgängig auch per Doppeltipp auf den Apple Pencil
+• Zen-Modus: Bedienelemente ausblenden und nur noch malen
 • Ohne Stift malst du mit dem Finger
 • Hell- und Dunkelmodus, VoiceOver-Unterstützung
 • Funktioniert komplett offline

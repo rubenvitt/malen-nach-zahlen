@@ -1,3 +1,9 @@
+- Seis herramientas: lápiz de color, pincel, tiza, aerógrafo, además de sombra y luz, que oscurecen o aclaran la pintura según la presión del lápiz
+- Tamaño del pincel ajustable sin saltos
+- Modo zen: oculta los controles, una barra discreta mantiene a mano herramienta, tamaño y color
+- Los colores terminados desaparecen de la barra de colores
+- La pintura se ve nítida incluso con mucho zoom
+- Ya no quedan bordes blancos al pintar encima de otro color
 - 68 imágenes nuevas en 10 colecciones temáticas
 - Los bordes ahora son líneas suaves y curvas
 - Pintura libre: pinta donde quieras, incluso sobre zonas terminadas con otro color

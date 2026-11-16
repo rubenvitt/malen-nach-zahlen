@@ -7,7 +7,7 @@ SCHILDEREN ALS MET EEN KWAST
 Je schildert streek voor streek met Apple Pencil, vrij en precies, net als op papier. Niets vult zichzelf in, en hoe netjes elke rand wordt, bepaal jij helemaal zelf.
 
 IN ALLE RUST
-Geen timer, geen punten, geen meldingen. Met je vingers verschuif, zoom en draai je de afbeelding als een vel papier. Voltooide vlakken worden netjes gevuld, voltooide kleuren krijgen een vinkje.
+Geen timer, geen punten, geen meldingen. Met je vingers verschuif, zoom en draai je de afbeelding als een vel papier. Voltooide kleuren krijgen een vinkje en kun je uit de kleurenbalk verbergen.
 
 JE AFBEELDING BLIJFT BEWAARD
 Elke streek wordt automatisch bewaard. Is de afbeelding klaar, dan verberg je de randen en deel je hem.
@@ -15,7 +15,9 @@ Elke streek wordt automatisch bewaard. Is de afbeelding klaar, dan verberg je de
 VERDER
 • Meer dan 70 motieven in 10 themapakketten om meteen te beginnen
 • 4 tot 30 kleuren, van grof tot heel fijn
-• Drie kwastmaten, ongedaan maken ook met dubbeltikken op Apple Pencil
+• Zes gereedschappen: kleurpotlood, kwast, krijt, airbrush, schaduw en licht, drukgevoelig
+• Traploos instelbare penseelgrootte, ongedaan maken ook met dubbeltikken op Apple Pencil
+• Zen-modus: verberg de bediening en schilder alleen nog
 • Zonder pen schilder je met je vinger
 • Lichte en donkere modus, VoiceOver-ondersteuning
 • Werkt volledig offline

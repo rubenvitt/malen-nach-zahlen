@@ -1,3 +1,9 @@
+- Zes gereedschappen: kleurpotlood, kwast, krijt, airbrush, plus schaduw en licht die verf donkerder of lichter maken afhankelijk van de pendruk
+- Traploos instelbare penseelgrootte
+- Zen-modus: verberg de bediening, een rustige balk houdt gereedschap, grootte en kleur bij de hand
+- Voltooide kleuren verdwijnen uit de kleurenbalk
+- Verf blijft haarscherp, ook als je ver inzoomt
+- Geen witte randjes meer bij overschilderen
 - 68 nieuwe afbeeldingen in 10 themareeksen
 - Randen zijn nu vloeiende, gladde lijnen
 - Vrij schilderen: schilder overal, ook met een andere kleur over voltooide vlakken

@@ -1,3 +1,9 @@
+- Sechs Werkzeuge: Buntstift, Pinsel, Kreide, Airbrush sowie Schatten und Licht, die vorhandene Farbe je nach Stiftdruck abdunkeln oder aufhellen
+- Pinselgröße stufenlos einstellbar
+- Zen-Modus: Bedienelemente ausblenden, eine leise Leiste hält Werkzeug, Größe und Farbe bereit
+- Fertige Farben verschwinden aus der Farbleiste
+- Farbe bleibt auch nah herangezoomt gestochen scharf
+- Keine weißen Ränder mehr beim Übermalen
 - 68 neue Motive in 10 Themenreihen
 - Ränder sind jetzt glatte, geschwungene Linien
 - Freies Malen: Du kannst überall malen, auch mit einer anderen Farbe über fertige Felder

@@ -1,3 +1,9 @@
+- Seis ferramentas: lápis de cor, pincel, giz, aerógrafo, além de sombra e luz, que escurecem ou clareiam a tinta conforme a pressão da caneta
+- Tamanho do pincel ajustável sem etapas
+- Modo zen: oculte os controles, uma barra discreta deixa ferramenta, tamanho e cor à mão
+- Cores concluídas somem da barra de cores
+- A tinta fica nítida mesmo com muito zoom
+- Sem bordas brancas ao pintar por cima de outra cor
 - 68 novas imagens em 10 coleções temáticas
 - As bordas agora são linhas suaves e curvas
 - Pintura livre: pinte em qualquer lugar, até sobre áreas prontas com outra cor
