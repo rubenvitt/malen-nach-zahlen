@@ -39,6 +39,28 @@ struct MotifPack: Identifiable, Sendable {
             String(localized: "Sonnenblumenfeld"),
             String(localized: "Zimmerpflanzenregal"),
         ]),
+        MotifPack("landscapes", String(localized: "Landschaften"), [
+            String(localized: "Felstürme im Morgenrot"),
+            String(localized: "Vulkan in der Nacht"),
+            String(localized: "Regenbogenberge"),
+        ]),
+        MotifPack("seasons", String(localized: "Jahreszeiten"), [
+            String(localized: "Herbstallee im Nebel"),
+            String(localized: "Hasenglöckchenwald"),
+            String(localized: "Entenfamilie im Frühling"),
+            String(localized: "Igel zwischen Krokussen"),
+        ]),
+        MotifPack("coast", String(localized: "Küsten & Strände"), [
+            String(localized: "Felsnadeln im Abendrot"),
+            String(localized: "Weiße Kreidefelsen"),
+            String(localized: "Bohlenweg durch die Dünen"),
+        ]),
+        MotifPack("countryside", String(localized: "Landleben"), [
+            String(localized: "Zypressenweg zum Landgut"),
+            String(localized: "Weinberg im Herbst"),
+            String(localized: "Windmühle im Tulpenfeld"),
+            String(localized: "Cottage-Garten"),
+        ]),
         MotifPack("travel", String(localized: "Fernweh"), [
             String(localized: "Küstendorf im Abendlicht"),
             String(localized: "Hütte am Bergsee"),
