@@ -159,6 +159,12 @@ private struct PaintChrome: View {
                 RoundButton(systemImage: "arrow.up.left.and.arrow.down.right", label: "Ganzes Bild") {
                     session.fitWholePicture()
                 }
+                if !session.isComplete {
+                    RoundButton(systemImage: "scope", label: "Offenes Feld finden") {
+                        session.findOpenField()
+                    }
+                    .accessibilityIdentifier("findOpenField")
+                }
                 RoundButton(systemImage: "eye.slash", label: "Werkzeuge ausblenden", action: onZen)
                     .accessibilityIdentifier("zenMode")
             }

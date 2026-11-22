@@ -4,4 +4,7 @@ import Foundation
 extension PaintingSession {
     /// „Ganzes Bild“: zoom the canvas so the whole picture fits.
     func fitWholePicture() { showWholePicture() }
+
+    /// „Offenes Feld finden“: jump to the next field that is not painted yet.
+    func findOpenField() { showNextOpenField() }
 }

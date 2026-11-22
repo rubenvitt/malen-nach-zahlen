@@ -82,3 +82,32 @@ import Testing
     s.brush = .large
     #expect(s.brushDiameter == BrushSize.large.diameter && s.brush == .large)
 }
+
+@MainActor @Test func fieldBoundsCoverEachField() {
+    let b = PaintingSession.fieldBounds(of: canvasTestTemplate())
+    #expect(b[0] == PixelRect(x0: 0, y0: 0, x1: 4, y1: 4))
+    #expect(b[1] == PixelRect(x0: 4, y0: 0, x1: 8, y1: 4))
+    #expect(b[2] == PixelRect(x0: 5, y0: 1, x1: 7, y1: 3))
+}
+
+@MainActor @Test func findingOpenFieldsGoesThroughTheSelectedColourFirst() {
+    let s = PaintingSession(template: canvasTestTemplate(), paintLayerPNG: nil)
+    s.selectedColor = 0
+    #expect(s.showNextOpenField() == 0)
+    #expect(s.showNextOpenField() == 2)                               // field 1 has colour 1
+    #expect(s.showNextOpenField() == 0)                               // and round again
+    // Colour 0 done: any open field, here only field 1.
+    s.beginStroke(radius: 40)
+    _ = s.continueStroke([CGPoint(x: 0, y: 4), CGPoint(x: 16, y: 4)], predicted: [])
+    _ = s.endStroke()
+    #expect(s.completedColors.contains(0) && !s.completedColors.contains(1))
+    #expect(s.showNextOpenField() == 1)
+    #expect(s.showNextOpenField() == 1)
+    s.selectColor(1)
+    s.beginStroke(radius: 40)
+    _ = s.continueStroke([CGPoint(x: 0, y: 4), CGPoint(x: 16, y: 4)], predicted: [])
+    _ = s.endStroke()
+    // Colour 1 over everything: field 1 done, fields 0 and 2 open again (wrong colour on them).
+    #expect(s.showNextOpenField() == 2)
+    #expect(s.showNextOpenField() == 0)
+}
