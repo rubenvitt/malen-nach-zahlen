@@ -165,3 +165,17 @@ private func pixel(_ b: PixelBuffer, x: Int, y: Int) -> [UInt8] {
     #expect(store.paintData(meta.id) == Data([9]))
     try? FileManager.default.removeItem(at: dir)
 }
+
+@Test func eraserClearsFinePaintToo() {
+    let l = PaintLayer(template: canvasTestTemplate())
+    l.beginStroke(color: 0, radius: 1.2)
+    _ = l.continueStroke([CGPoint(x: 2, y: 4), CGPoint(x: 14, y: 4)])
+    _ = l.endStroke()
+    #expect(l.fineTileCount == 1)
+    l.beginStroke(color: 0, radius: 4, kind: .eraser)
+    _ = l.continueStroke([CGPoint(x: 0, y: 4), CGPoint(x: 16, y: 4)])
+    #expect(l.endStroke().committed)
+    #expect(l.coverage.allSatisfy { $0 == 0 })
+    let all = whole(l), sharp = l.detailWindow(around: all).render(rect: all, scale: 4)
+    #expect((0..<sharp.height).allSatisfy { y in (0..<sharp.width).allSatisfy { alpha(sharp, x: $0, y: y) == 0 } })
+}

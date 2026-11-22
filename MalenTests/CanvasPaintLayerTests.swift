@@ -386,3 +386,41 @@ private func strokeAcross(_ l: PaintLayer, color: Int, y: CGFloat, radius: Doubl
     #expect(firm > light)
     #expect(firm <= 6)                                                // never wider than the size
 }
+
+@Test func eraserTakesPaintOffAndProgressWithIt() {
+    let l = PaintLayer(template: canvasTestTemplate())
+    l.beginStroke(color: 0, radius: 3, kind: .eraser)
+    _ = l.continueStroke([CGPoint(x: 2, y: 4), CGPoint(x: 14, y: 4)])
+    #expect(!l.endStroke().committed)                                 // bare paper: nothing to erase
+    _ = strokeAcross(l, color: 0, y: 4, radius: 6)
+    l.beginStroke(color: 0, radius: 2, kind: .shadow)
+    _ = l.continueStroke([CGPoint(x: 2, y: 4), CGPoint(x: 14, y: 4)])
+    _ = l.endStroke()
+    #expect(l.isColorComplete(0))
+    let coverage = l.coverage, shade = l.shade, progress = l.progress
+
+    l.beginStroke(color: 1, radius: 8, kind: .eraser)                 // the selected colour does not matter
+    _ = l.continueStroke([CGPoint(x: 0, y: 4), CGPoint(x: 16, y: 4)])
+    #expect(l.endStroke().committed)
+    #expect(l.coverage.allSatisfy { $0 == 0 })
+    #expect(l.shade.allSatisfy { $0 == PaintLayer.neutralShade })      // bare paper is clean again
+    #expect(l.progress == 0 && l.completedColors.isEmpty)
+    #expect(l.paintedOfField.allSatisfy { $0 == 0 })
+
+    _ = l.undo()
+    #expect(l.coverage == coverage && l.shade == shade && l.progress == progress)
+    #expect(l.isColorComplete(0))
+}
+
+@Test func eraserEdgeLeavesPaintThinner() {
+    let l = PaintLayer(template: canvasTestTemplate())
+    _ = strokeAcross(l, color: 0, y: 4, radius: 6)
+    l.beginStroke(color: 0, radius: 1.25, kind: .eraser)
+    _ = l.continueStroke([CGPoint(x: 0, y: 4), CGPoint(x: 16, y: 4)])
+    _ = l.endStroke()
+    let c = l.coverage
+    #expect(c[4 * l.width + 8] == 0)                                  // under the eraser: gone
+    #expect(c[0 * l.width + 8] == 255)                                // out of reach: untouched
+    #expect(c.contains { $0 > 0 && $0 < 255 })                        // soft rim in between
+    #expect(l.paintColor[0 * l.width + 8] == 0)
+}

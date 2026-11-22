@@ -46,6 +46,7 @@ enum BrushSize: CaseIterable, Codable {
         case .pencil: 4
         case .brush, .crayon: 18
         case .airbrush, .shadow, .light: 36
+        case .eraser: 24
         }
     }
     /// Brush type or shading tool for the next stroke.
@@ -53,7 +54,7 @@ enum BrushSize: CaseIterable, Codable {
         get { currentTool }
         set {
             currentTool = newValue
-            if !newValue.isShading { lastPaintTool = newValue }
+            if !newValue.ignoresColor { lastPaintTool = newValue }
         }
     }
     private var currentTool = BrushKind.brush
@@ -92,11 +93,11 @@ enum BrushSize: CaseIterable, Codable {
         onStrokeEnded?()
     }
 
-    /// Picks a paint pot. Shading works on any colour, so picking one means painting again: a
-    /// shading tool hands over to the last paint tool.
+    /// Picks a paint pot. Shading and erasing work on any colour, so picking one means painting
+    /// again: those tools hand over to the last paint tool.
     func selectColor(_ index: Int) {
         selectedColor = index
-        if tool.isShading { tool = lastPaintTool }
+        if tool.ignoresColor { tool = lastPaintTool }
     }
 
     /// Which paint pots to offer, in order: open colours first, finished ones only with `showDone`

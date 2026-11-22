@@ -42,8 +42,12 @@ enum BrushKind: String, CaseIterable, Codable, Sendable {
     case shadow
     /// Lightens paint that is already there.
     case light
+    /// Takes paint off again, down to bare paper.
+    case eraser
 
     var isShading: Bool { self == .shadow || self == .light }
+    /// Works on the paint that is already there, whatever colour is picked.
+    var ignoresColor: Bool { isShading || self == .eraser }
 
     /// Soft tools reach a bit further than the brush size, so their faded edge does not make them
     /// look thinner.
@@ -377,7 +381,7 @@ final class PaintLayer {
     static func touch(_ kind: BrushKind, distance d: Double, radius r: Double, pressure p: Double, grain: Double) -> Double {
         let edge = min(1, max(0, r + 0.5 - d))
         switch kind {
-        case .brush:
+        case .brush, .eraser:
             return edge
         case .pencil:
             // The tip widens with pressure; thinner than a pixel, the line gets lighter instead.
@@ -424,6 +428,17 @@ final class PaintLayer {
         return Pixel(coverage: coverage, color: other, shade: shade, under: color, mix: UInt8((new * 255).rounded()))
     }
 
+    /// Takes `amount` of the paint off `old`: coverage shrinks, the colours stay what they were.
+    /// Bare paper comes back fully clean (unshaded, unmixed).
+    static func erase(_ old: Pixel, amount: UInt8) -> Pixel {
+        guard old.coverage > 0, amount > 0 else { return old }
+        let left = Int((Double(old.coverage) * (1 - Double(amount) / 255)).rounded())
+        guard left > 0 else { return Pixel(coverage: 0, color: old.color, shade: neutralShade, under: old.color, mix: 0) }
+        var p = old
+        p.coverage = UInt8(left)
+        return p
+    }
+
     /// Moves the shade of existing paint `amount` of the way towards darkest or lightest.
     static func shade(_ old: Pixel, amount: UInt8, darker: Bool) -> Pixel {
         guard old.coverage > 0 else { return old }
@@ -431,6 +446,15 @@ final class PaintLayer {
         let target = darker ? 0.0 : 255.0
         p.shade = UInt8((Double(old.shade) + (target - Double(old.shade)) * Double(amount) / 255).rounded())
         return p
+    }
+
+    /// What one touch of `kind` makes of `before`.
+    @inline(__always) private static func apply(_ kind: BrushKind, color: UInt8, amount: UInt8, over before: Pixel) -> Pixel {
+        switch kind {
+        case .shadow, .light: shade(before, amount: amount, darker: kind == .shadow)
+        case .eraser: erase(before, amount: amount)
+        default: paint(color, amount: amount, over: before, opaque: kind.isOpaque)
+        }
     }
 
     /// Lays a round-capped segment into the stroke mask and mixes every pixel it raised anew from
@@ -481,8 +505,7 @@ final class PaintLayer {
                             mask[li] = amount
                             let before = Pixel(coverage: original[li], color: original[area + li], shade: original[2 * area + li],
                                                under: original[3 * area + li], mix: original[4 * area + li])
-                            let next = kind.isShading ? Self.shade(before, amount: amount, darker: kind == .shadow)
-                                                      : Self.paint(color, amount: amount, over: before, opaque: kind.isOpaque)
+                            let next = Self.apply(kind, color: color, amount: amount, over: before)
                             let i = y * w + x
                             let now = Pixel(coverage: px[i], color: px[n + i], shade: px[2 * n + i],
                                             under: px[3 * n + i], mix: px[4 * n + i])
@@ -665,8 +688,7 @@ final class PaintLayer {
                         mask[li] = amount
                         let before = Pixel(coverage: original[li], color: original[area + li], shade: original[2 * area + li],
                                            under: original[3 * area + li], mix: original[4 * area + li])
-                        let next = kind.isShading ? Self.shade(before, amount: amount, darker: kind == .shadow)
-                                                  : Self.paint(color, amount: amount, over: before, opaque: kind.isOpaque)
+                        let next = Self.apply(kind, color: color, amount: amount, over: before)
                         let now = Pixel(coverage: px[li], color: px[area + li], shade: px[2 * area + li],
                                         under: px[3 * area + li], mix: px[4 * area + li])
                         guard next != now else { continue }
