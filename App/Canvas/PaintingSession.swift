@@ -112,6 +112,50 @@ enum BrushSize: CaseIterable, Codable {
     /// Zooms out to show the whole picture ("Ganzes Bild").
     func showWholePicture() { canvasView?.zoomToFit(animated: true) }
 
+    // MARK: Open fields
+
+    /// Bounding box of every field in grid pixels (half-open), worked out on first use.
+    @ObservationIgnored private var fieldBoundsCache: [PixelRect]?
+    @ObservationIgnored private var lastShownField: Int?
+
+    static func fieldBounds(of t: Template) -> [PixelRect] {
+        var b = [PixelRect](repeating: PixelRect(x0: .max, y0: .max, x1: .min, y1: .min), count: t.sizeOfField.count)
+        for y in 0..<t.height {
+            for x in 0..<t.width {
+                let f = Int(t.fieldOfPixel[y * t.width + x])
+                b[f].x0 = min(b[f].x0, x); b[f].y0 = min(b[f].y0, y)
+                b[f].x1 = max(b[f].x1, x + 1); b[f].y1 = max(b[f].y1, y + 1)
+            }
+        }
+        return b
+    }
+
+    /// The next field that is not done yet, in reading order after the one shown last. While the
+    /// selected colour still has open fields, only those; otherwise any colour. Nil when all are done.
+    func nextOpenField() -> Int? {
+        let complete = layer.fieldComplete, n = complete.count
+        guard n > 0 else { return nil }
+        let c = selectedColor
+        let onlyMine = template.palette.indices.contains(c) && !layer.isColorComplete(c)
+        let start = ((lastShownField ?? -1) + 1) % n
+        for k in 0..<n {
+            let f = (start + k) % n
+            if !complete[f] && (!onlyMine || Int(template.colorOfField[f]) == c) { return f }
+        }
+        return nil
+    }
+
+    /// „Offenes Feld finden“: moves the canvas to the next open field and lights it up briefly.
+    /// Each press goes on to the next one. Returns the field, nil if nothing is left.
+    @discardableResult func showNextOpenField() -> Int? {
+        guard let f = nextOpenField() else { return nil }
+        lastShownField = f
+        let bounds = fieldBoundsCache ?? Self.fieldBounds(of: template)
+        fieldBoundsCache = bounds
+        canvasView?.focus(onField: f, bounds: bounds[f])
+        return f
+    }
+
     /// Coverage of the paint layer as an 8-bit grey PNG (2 px per grid pixel). Not a viewable
     /// picture; use `renderFinished` for that. Round-trips exactly through `init`.
     func paintLayerPNG() -> Data { layer.pngData() }

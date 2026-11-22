@@ -82,3 +82,14 @@ private func close(_ a: CGPoint, _ b: CGPoint, _ tolerance: CGFloat = 0.01) -> B
     #expect(c.x >= -0.05 && c.x <= CGFloat(t.width) + 0.05)
     #expect(c.y >= -0.05 && c.y <= CGFloat(t.height) + 0.05)
 }
+
+@MainActor @Test func findingAnOpenFieldCentresAndLightsItUp() {
+    let view = makeCanvas()
+    view.rotate(by: 0.4, around: CGPoint(x: 120, y: 80))
+    view.focus(onField: 2, bounds: PixelRect(x0: 5, y0: 1, x1: 7, y1: 3))
+    #expect(close(contentPoint(view, CGPoint(x: 200, y: 150)), CGPoint(x: 6, y: 2)))
+    #expect(abs(view.rotation - 0.4) < 1e-6)                          // the paper keeps its turn
+    let glow = view.flashLayerForTesting
+    #expect(glow?.frame == CGRect(x: 5, y: 1, width: 2, height: 2))
+    #expect(glow?.contents != nil)
+}

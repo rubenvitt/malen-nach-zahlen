@@ -169,6 +169,77 @@ final class PaintCanvasView: UIView, UIScrollViewDelegate, UIGestureRecognizerDe
         if !animated { updateDetail() }
     }
 
+    /// Brings field `field` (bounding box `r` in grid pixels) into the middle of the screen, zoomed
+    /// so that it is easy to see and paint, and lights it up for a moment. The paper keeps its turn.
+    func focus(onField field: Int, bounds r: PixelRect) {
+        guard !r.isEmpty, bounds.width > 0, bounds.height > 0 else { return }
+        freezeRunningAnimation()
+        let rect = CGRect(x: r.x0, y: r.y0, width: r.x1 - r.x0, height: r.y1 - r.y0)
+        // The field takes up about a third of the screen; tiny fields stop at the closest zoom.
+        let pad = max(rect.width, rect.height) + 8
+        let target = rect.insetBy(dx: -pad, dy: -pad)
+        let wanted = min(bounds.width / target.width, bounds.height / target.height)
+        let scale = min(max(wanted, min(fitScale, scrollView.maximumZoomScale)), scrollView.maximumZoomScale)
+        let size = scrollView.bounds.size
+        let offset = CGPoint(x: rect.midX * scale - size.width / 2, y: rect.midY * scale - size.height / 2)
+        isAtFit = false
+        let move = {
+            self.scrollView.zoomScale = scale
+            self.scrollView.contentOffset = offset
+        }
+        if UIAccessibility.isReduceMotionEnabled {
+            move()
+            updateDetail()
+        } else {
+            UIView.animate(withDuration: 0.45, delay: 0, options: [.beginFromCurrentState, .curveEaseInOut, .allowUserInteraction],
+                           animations: move) { _ in self.updateDetail() }
+        }
+        flash(field: field, in: r)
+    }
+
+    /// The highlight `focus` puts over a field; kept for tests.
+    private(set) var flashLayerForTesting: CALayer?
+
+    /// Lays the field's shape over the picture in the accent colour and lets it pulse twice.
+    private func flash(field: Int, in r: PixelRect) {
+        flashLayerForTesting?.removeFromSuperlayer()
+        let t = session.template, w = r.x1 - r.x0, h = r.y1 - r.y0
+        let tint = (UIColor(named: "AccentColor") ?? .systemBlue).resolvedColor(with: traitCollection)
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        tint.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        let rgba: [UInt8] = [red, green, blue, 1].map { UInt8(max(0, min(1, $0)) * 255) }
+        var bytes = [UInt8](repeating: 0, count: w * h * 4)
+        for y in 0..<h {
+            for x in 0..<w where Int(t.fieldOfPixel[(r.y0 + y) * t.width + r.x0 + x]) == field {
+                let i = (y * w + x) * 4
+                bytes[i] = rgba[0]; bytes[i + 1] = rgba[1]; bytes[i + 2] = rgba[2]; bytes[i + 3] = 255
+            }
+        }
+        guard let provider = CGDataProvider(data: Data(bytes) as CFData),
+              let image = CGImage(width: w, height: h, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: w * 4,
+                                  space: CGColorSpaceCreateDeviceRGB(),
+                                  bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                                  provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)
+        else { return }
+        let glow = CALayer()
+        glow.frame = CGRect(x: r.x0, y: r.y0, width: w, height: h)
+        glow.contents = image
+        glow.magnificationFilter = .linear
+        glow.opacity = 0
+        content.layer.addSublayer(glow)
+        flashLayerForTesting = glow
+        let pulse = CAKeyframeAnimation(keyPath: "opacity")
+        pulse.values = UIAccessibility.isReduceMotionEnabled ? [0.5, 0.5, 0] : [0, 0.6, 0.15, 0.6, 0]
+        pulse.duration = 1.8
+        pulse.beginTime = CACurrentMediaTime() + (UIAccessibility.isReduceMotionEnabled ? 0 : 0.35)
+        pulse.fillMode = .backwards
+        glow.add(pulse, forKey: "pulse")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.3) { [weak self, weak glow] in
+            glow?.removeFromSuperlayer()
+            if self?.flashLayerForTesting === glow { self?.flashLayerForTesting = nil }
+        }
+    }
+
     /// Keeps the picture's edges from crossing the middle of the screen after the offset was set
     /// directly (turning, resizing), where the scroll view itself does not hold the limits.
     private func clampOffset() {
