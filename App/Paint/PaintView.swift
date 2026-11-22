@@ -400,7 +400,7 @@ private struct DoneToggle: View {
     }
 }
 
-/// Brush types and shading tools, in a column on the leading edge.
+/// Brush types, shading tools and the eraser, in a column on the leading edge.
 private struct ToolRail: View {
     @Binding var tool: BrushKind
     /// Without its own capsule, e.g. inside a popover.
@@ -415,6 +415,8 @@ private struct ToolRail: View {
             ForEach(Self.paint, id: \.self) { kind in button(kind) }
             Capsule().fill(Theme.ink.opacity(0.15)).frame(width: 24, height: 2).padding(.vertical, 4)
             ForEach(Self.shading, id: \.self) { kind in button(kind) }
+            Capsule().fill(Theme.ink.opacity(0.15)).frame(width: 24, height: 2).padding(.vertical, 4)
+            button(.eraser)
         }
         .padding(4)
         .background(framed ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(.clear), in: Capsule())
@@ -446,6 +448,7 @@ extension BrushKind {
         case .airbrush: "aqi.medium"
         case .shadow: "moon.fill"
         case .light: "sun.max.fill"
+        case .eraser: "eraser.fill"
         }
     }
 
@@ -457,6 +460,7 @@ extension BrushKind {
         case .airbrush: "Airbrush"
         case .shadow: "Schatten"
         case .light: "Licht"
+        case .eraser: "Radiergummi"
         }
     }
 }

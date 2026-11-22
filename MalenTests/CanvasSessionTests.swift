@@ -63,6 +63,9 @@ import Testing
     s.tool = .airbrush
     s.selectColor(0)
     #expect(s.tool == .airbrush)
+    s.tool = .eraser
+    s.selectColor(1)
+    #expect(s.tool == .airbrush)
 }
 
 @MainActor @Test func brushSizeIsStepless_perTool() {
